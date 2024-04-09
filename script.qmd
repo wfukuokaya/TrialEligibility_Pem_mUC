@@ -1,0 +1,1470 @@
+---
+title: "Effectiveness of pembrolizumab in trial-ineligible patients with metastatic urothelial carcinoma"
+titlerunning: Effectiveness of pembrolizumab in trial-ineligible mUC
+output: 
+  word_document: 
+    reference_docx: ~/OneDrive/research data/R/word_template.docx
+bibliography: references.bib
+csl: cancer-immunology-immunotherapy
+---
+
+d0 # raw data
+
+```{r consort_diagram, include = FALSE}
+# CONSORT diagram
+library(ggconsort)
+study_cohorts <- d0 %>% 
+  cohort_start("Patients with metastatic urinary tract cancer  \ntreated with pembrolizumab") %>% 
+  
+  cohort_define(
+    patient_platinum = .full %>% filter(regimen != "other" | !is.na(regimen)), 
+    patient_bor = patient_platinum %>% filter(!is.na(ibor)),
+    patient_nonuro = patient_bor %>% filter(prim != "other"),
+    patient_missing = patient_nonuro %>% filter_at(vars(age, sex, smoking, ps, mi, chd, cvd, pvd, dementia, copd, ctd, pud, ld, dm, hemi, malg, hiv, ckd,
+                                                        prim, hist, brain, lung, pleura, bone, liver, adrenal, spleen, pancreas, bowel, peritoneum, retro, extln, intln, other,
+                                                        chemo, pain, ppi, hb, nlr),
+                                                   all_vars(!is.na(.))), # exclude missing data
+    patient_fixed = patient_missing %>% filter(vio_prog_wo == "no"),
+    
+    ineligible = patient_fixed %>% filter(vio_all == "yes"),
+    eligible = patient_fixed %>% filter(vio_all == "no"),
+    
+    excluded_platinum = anti_join(.full, patient_platinum, by = "id"),
+    excluded_bor = anti_join(patient_platinum, patient_bor, by = "id"),
+    excluded_nonuro = anti_join(patient_bor, patient_nonuro, by = "id"),
+    excluded_missing = anti_join(patient_nonuro, patient_missing, by = "id"),
+    excluded_progression = anti_join(patient_missing, patient_fixed, by = "id"),
+    
+  ) %>% 
+  
+  cohort_label(
+    patient_fixed = "Patients for the analysis",
+    ineligible = "Trial-ineligible patients",
+    eligible = "Trial-eligible patients",
+    
+    excluded_nonuro = "Non-urothelial   cancer",
+    excluded_platinum = "Without prior platinum-based  chemotherapy",
+    excluded_bor = "Without available treatment response data",
+    excluded_missing = "With missing baseline data",
+    excluded_progression = "Without progression following chemotherapy"
+  )
+
+study_consort <- study_cohorts %>% 
+  consort_box_add(
+    "full", 10, 10, cohort_count_adorn(study_cohorts, .full)
+  ) %>% 
+  
+  consort_box_add(
+    "exclusions", 10.5, 6, glue::glue(
+      '
+      {cohort_count_adorn(study_cohorts, excluded_platinum)} <br>
+      {cohort_count_adorn(study_cohorts, excluded_bor)} <br>
+      {cohort_count_adorn(study_cohorts, excluded_nonuro)} <br>
+      {cohort_count_adorn(study_cohorts, excluded_missing)} <br>
+      {cohort_count_adorn(study_cohorts, excluded_progression)}
+      ')
+  ) %>% 
+  consort_box_add(
+    "patient_fixed", 10, 3, cohort_count_adorn(study_cohorts, patient_fixed) 
+  ) %>%
+  consort_box_add(
+    "eligible", 7, 0, cohort_count_adorn(study_cohorts, eligible) 
+  ) %>% 
+  consort_box_add(
+    "ineligible", 13, 0, cohort_count_adorn(study_cohorts, ineligible) 
+  ) %>% 
+  consort_line_add(
+    start_x = 7, end_x = 13, start_y = 2, end_y = 2
+  ) %>% 
+  consort_arrow_add(
+    start_x = 7, end_side = "top", start_y = 2, end = "eligible"
+  ) %>% 
+  consort_arrow_add(
+    start_x = 13, end_side = "top", start_y = 2, end = "ineligible"
+  ) %>%
+  consort_arrow_add(
+    end = "exclusions", end_side = "left", start_x = 10, start_y = 6
+  ) %>% 
+  consort_arrow_add(
+    start_x = 10, start_y = 10, end_x = 10, end_y = 2,
+  ) 
+
+study_consort %>% 
+  ggplot() + 
+  geom_consort() +
+  theme_consort(margin_h = 8, margin_v = 2) + 
+  ggtext::geom_richtext(
+    aes(x = 10, y = 1, label = "the KEYNOTE-045  criteria"),
+    fill = "#9bc0fc"
+  )
+
+# ggsave("myplot.svg", width = 25, height = 8, units = "cm")
+```
+
+```{r akm_rmst_diff, include = FALSE}
+akm_rmst_diff <- function(time, status, group, weight = NULL, tau = NULL, alpha = .05, 
+                          xaxismin = 0, xaxismax=max(time)){
+  if(sum(time<0)>0){print("Error: times must be positive.")
+  }else{
+    if(sum(weight<=0)>0){print("Error: weights must be greater than 0.")
+    }else{
+      if(sum(status!=0 & status!=1)>0){print("Error: status must be a vector of 0s and/or 1s.")
+      }else{
+        
+        if(is.null(weight)){weight <- rep(1, length(time))}	
+        data <- data.frame(time, status, group, weight)
+        data <- data[!is.na(data$group) & !is.na(data$time),]
+        data <- data[order(group),] 
+        
+        #--- If tau not specified, use minimum tau from all groups ---
+        j=length(unique(data$group))
+        
+        if(is.null(tau)){
+          taui = rep(999, j)
+          for (i in (1:j)){
+            groupval <- (levels(data$group)[i])
+            dat_group <- data[which(data$group==(groupval)),]
+            taui[i] <- max(dat_group$time[dat_group$status==1])
+          }
+          tau <- min(taui)
+        }
+        
+        #--- Calculate AKM RMST in each group ---
+        rmst <- rep(999, length(1:j))
+        groupval <- rep(999, length(1:j))
+        rmst_var <- rep(999, length(1:j))
+        rmst_se <- rep(999, length(1:j))
+        
+        for (i in 1:j){
+          groupval[i] <- (levels(data$group)[i])
+          dat_group <- data[which(data$group==(groupval[i])),]
+          
+          #--- AKM ---
+          # Based on 'adjusted.KM' function from {IPWsurvival} package
+          # Author: F. Le Borgne and Y. Foucher
+          tj <- c(0,sort(unique(dat_group$time[dat_group$status==1])))
+          dj <- sapply(tj, function(x){sum(dat_group$weight[dat_group$time==x & dat_group$status==1])})
+          yj <- sapply(tj, function(x){sum(dat_group$weight[dat_group$time>=x])})
+          st <- cumprod(1-(dj/yj))
+          m <- sapply(tj, function(x){sum((dat_group$weight[dat_group$time>=x])^2)})
+          mj <- ((yj^2)/m)
+          #ft <- data.frame(time=tj, n_risk=yj, n_event=dj, survival=st, variable=i, m=mj)
+          ft <- data.frame(tj, yj, dj, st, i, mj)
+          
+          #--- RMST ---
+          # Based on 'rmst1 function' from {survRM2} package
+          # Author: Hajime Uno, Lu Tian, Angel Cronin, Chakib Battioui, Miki Horiguchi
+          rtime <- ft$tj<=tau
+          tj_r <- sort(c(ft$tj[rtime],tau))
+          st_r <- ft$st[rtime]
+          yj_r <- ft$yj[rtime]
+          dj_r <- ft$dj[rtime]
+          time_diff <- diff(c(0, tj_r))
+          areas <- time_diff * c(1, st_r)
+          rmst[i] <- sum(areas)
+          
+          #--- Variance ---
+          mj_r <- ft$mj[rtime]
+          var_r <- ifelse((yj_r-dj_r)==0, 0, dj_r /(mj_r *(yj_r - dj_r)))
+          #var_r <- ifelse((yj_r-dj_r)==0, 0, dj_r /(yj_r *(yj_r - dj_r)))
+          var_r <- c(var_r,0)
+          rmst_var[i] <- sum(cumsum(rev(areas[-1]))^2 * rev(var_r)[-1])
+          rmst_se[i] <- sqrt(rmst_var[i])
+        }
+      }
+    }
+  }
+  
+  #--- Compare RMST between groups and compile output---
+  results <- data.frame(groupval,rmst,rmst_var,rmst_se,tau)
+  pwc <- ((j^2)-j)/2   #number of pairwise comparisons
+  
+  label_diff <- rep(999,(pwc))
+  rmst_diff <- rep(999,(pwc))
+  rmst_diff_se <- rep(999,(pwc))
+  rmst_diff_low <- rep(999,(pwc))
+  rmst_diff_upp <- rep(999,(pwc))
+  rmst_diff_pval <- rep(999,(pwc))
+  
+  output_diff <- data.frame(label_diff,rmst_diff,rmst_diff_se,rmst_diff_low,rmst_diff_upp,rmst_diff_pval)
+  l <- 1
+  
+  for (i in 1:(j-1)){
+    for (j in (i+1):j){
+      # Based on 'rmst2 function' from {survRM2} package
+      # Author: Hajime Uno, Lu Tian, Angel Cronin, Chakib Battioui, Miki Horiguchi
+      
+      #--- RMST Difference ---
+      output_diff[l,]$label_diff <- paste('Groups',results[j,]$groupval,'vs.',results[i,]$groupval,' ')
+      output_diff[l,]$rmst_diff <- (results[j,]$rmst - results[i,]$rmst)
+      output_diff[l,]$rmst_diff_se <- sqrt(results[j,]$rmst_var + results[i,]$rmst_var)
+      output_diff[l,]$rmst_diff_low <- output_diff[l,]$rmst_diff - qnorm(1-alpha/2)*output_diff[l,]$rmst_diff_se
+      output_diff[l,]$rmst_diff_upp <- output_diff[l,]$rmst_diff + qnorm(1-alpha/2)*output_diff[l,]$rmst_diff_se
+      output_diff[l,]$rmst_diff_pval <- 2*(1-pnorm(abs(output_diff[l,]$rmst_diff)/output_diff[l,]$rmst_diff_se))
+      
+      l <- l+1 #move to next row
+    }
+  }
+  
+  colnames(output_diff) <- c("Groups", "Est.", "SE", "CIL", "CIU", "p")
+  rownames(output_diff) <- c(output_diff$Groups)
+  print(round(output_diff[c(2,3,4,5,6)],3))
+}
+```
+
+```{r propensity_score_estimation and check their distribution, include = FALSE}
+cbw <- weightit(vio_all_bin ~ 
+                  age + sex + ps_cat + bmi + smoking_cat + surgery + prim + visceral + liver + platinum_cat + chemo_bin + ppi + antibiotic + nlr + bajorin, 
+                data = df, method = "ps", estimand = "ATE", stabilize = TRUE)
+wgt <- cbw[["weights"]]
+pscores <- cbw[["ps"]]
+df <- tibble(df, pscores)
+df <- tibble(df, wgt)
+
+# standardized mean difference plot
+# define ggplot2 theme...
+set.cobalt.options(binary = "std")
+
+theme_jikei <- function(base_size = 10, 
+                        dark_text = "#1A242F") {
+  mid_text <-  monochromeR::generate_palette(
+    dark_text, "go_lighter",
+    n_colors = 7)[2]
+  
+  light_text <-  monochromeR::generate_palette(
+    dark_text, "go_lighter",
+    n_colors = 7)[4]
+  
+  theme_grey(base_size = base_size) +
+    theme(text = element_text(color = mid_text, lineheight = 1.1),
+          plot.title = element_text(color = dark_text, size = rel(1.2)),
+          plot.subtitle = element_text(size = rel(1.1)),
+          axis.text.y = element_text(color = light_text, size = rel(1)),
+          axis.title.y = element_text(size = rel(1)),
+          axis.text.x = element_text(color = mid_text, size = rel(1)),
+          axis.title.x = element_text(size = rel(1)),
+          legend.position = "top",
+          panel.grid = element_line(color = "#F3F4F5"),
+          plot.caption = element_text(size = rel(1))) 
+}
+
+label <- data.frame(
+  old = c("age", "sex_female", "ps_cat_1 or more", "bmi", "smoking_cat_never", "surgery_yes",
+          "visceral_LN or visceral only", "platinum_cat_Cisplatin", "chemo_bin_salvage", 
+          "ppi_yes", "antibiotic_yes", "nlr", "bajorin", 
+          "local_yes", "num_3 or more", "cpi_pembrolizumab", 
+          "prim_upper tract", "hist_cat_Urothelial carcinoma", "hist_cat_UC with variant histology", "hist_cat_Pure non-UC", "symptom_yes", 
+          "chemo_cisplatin_yes", "metcat_LN only", "metcat_visceral metastasis", "metcat_LN and visceral metastasis", "metvol_score_2 or more", "liver_yes", "hb", "lognlr"),
+  new = c("Age, year (continuous)", "Sex (Female vs. Male)", "ECOG PS (1-4 vs. 0)", "BMI (continuous)", "Smoking history (former/current vs.never)", "Prior surgery (Yes vs. No)",
+          "Location of metastasis (LN or visceral only vs. both)", "Previous chemotherapy (cisplatin vs. other)", "Most recent chemotherapy (salvage vs. perioperative)",
+          "Concomitant PPI use (Yes vs. No)", "Previous antibiotic use (Yes vs. No)", "NLR (continuous)", "Bajorin risk score (1-2 vs. 0)", 
+          "Previous local therapy (Yes vs. No)", "Number of previous systemic therapy (3 or more vs. 1-2)", "Previous checkpoint inhibitor (Pembrolizumab vs. avelumab)",
+          "Primary location (Upper tract vs. lower tract)", "Tumor histology: Urothelial carcinoma", "Tumor histology: UC with variant histology", "Tumor histology: Pure non-UC", "Symptomatic disease (Yes vs. No)",
+          "Previous cisplatin-containing chemotherapy (Yes vs. No)", "Metastatic location: LN only", "Metastatic location: Visceral metastasis", "Metastatic location: LN and visceral metastasis", "Number of visceral metastasis (2 or more vs. 0-1)",
+          "Liver metastasis", "Baseline hemoglobin", "Baseline NLR (log-transformed)")
+)
+
+smdplot <- love.plot(cbw, drop.distance = TRUE, abs = FALSE, 
+                     colors = c("#EE0000FF", "#39568CFF"), shapes = c("diamond filled", "circle filled"), sample.names = c("Crude", "Weighted"), 
+                     r.thresholds = 0.1, size = 3.3, themes = theme_grey(), var.names = label) + 
+    theme_jikei() + 
+  theme(plot.title = element_blank(),
+        plot.subtitle = element_blank(),
+        legend.title = element_blank(), 
+        legend.position = "top") +
+  labs(
+    x = "Standarized mean difference (ineligible vs. eligible)"
+  ) + 
+  scale_x_continuous(n.breaks = 5) + 
+  geom_vline(aes(xintercept = 0.1), linetype = "dashed", color = "grey35") + 
+  geom_vline(aes(xintercept = -0.1), linetype = "dashed", color = "grey35") 
+
+cbw2 <- weightit(vio_all2_bin ~ 
+                   age + sex + ps_cat + bmi + smoking_cat + surgery + prim + visceral + liver + platinum_cat + chemo_bin + ppi + antibiotic + nlr + bajorin + vio_prog_wo, 
+                 data = df_sub, method = "ps", estimand = "ATE", stabilize = TRUE)
+wgt2 <- cbw2[["weights"]]
+pscores2 <- cbw2[["ps"]]
+df_sub <- tibble(df_sub, pscores2)
+df_sub <- tibble(df_sub, wgt2)
+
+# propensity score distribution
+dist <- ggplot() +
+  geom_density(data = df %>% filter(vio_all_bin == 1), 
+               aes(x = pscores),
+               fill = "grey", alpha = 0.7) + 
+  geom_density(data = df %>% filter(vio_all_bin == 0),
+               aes(x = pscores, y = -..density..),
+               fill = "grey", alpha = 0.7) + 
+  geom_density(data = df %>% filter(vio_all_bin == 1), 
+               aes(x = pscores, weight = wgt),
+               fill = "#EE0000FF", alpha = 0.7) + 
+  geom_density(data = df %>% filter(vio_all_bin == 0),
+               aes(x = pscores, weight = wgt, y = -..density..),
+               fill = "#3B4992FF", alpha = 0.7) + 
+  annotate(geom = "label", x = 0.25, y = 2, label = "Ineligible (IPTW pseudo-population)",
+           fill = "#EE0000FF", color = "white", alpha = 0.8) + 
+  annotate(geom = "label", x = 0.5, y = 1.8, label = "Ineligible (actual)",
+           fill = "grey", color = "white") + 
+  annotate(geom = "label", x = 0.6, y = -1.8, label = "Eligible (IPTW pseudo-population)",
+           fill = "#3B4992FF", color = "white", alpha = 0.8) + 
+  annotate(geom = "label", x = 0.3, y = -2.2, label = "Eligible (actual)",
+           fill = "grey", color = "white") +
+  geom_hline(yintercept = 0, color = "white", size = 0.25) + 
+  scale_y_continuous(label = abs) + 
+  theme_minimal(base_size = 14) + 
+  labs(x = "Propensity scores", y = "Kernel density") # PS distribution of unweighted and weighted populations
+
+# propensity score distribution for vio_all2
+dist2 <- ggplot() +
+  geom_density(data = df_sub %>% filter(vio_all2_bin == 1), 
+               aes(x = pscores2),
+               fill = "grey", alpha = 0.7) + 
+  geom_density(data = df_sub %>% filter(vio_all2_bin == 0),
+               aes(x = pscores2, y = -..density..),
+               fill = "grey", alpha = 0.7) + 
+  geom_density(data = df_sub %>% filter(vio_all2_bin == 1), 
+               aes(x = pscores2, weight = wgt2),
+               fill = "#EE0000FF", alpha = 0.7) + 
+  geom_density(data = df_sub %>% filter(vio_all2_bin == 0),
+               aes(x = pscores2, weight = wgt2, y = -..density..),
+               fill = "#3B4992FF", alpha = 0.7) + 
+  annotate(geom = "label", x = 0.25, y = 1.7, label = "Ineligible (IPTW pseudo-population)",
+           fill = "#EE0000FF", color = "white", alpha = 0.8) + 
+  annotate(geom = "label", x = 0.75, y = 1.7, label = "Ineligible (actual)",
+           fill = "grey", color = "white") + 
+  annotate(geom = "label", x = 0.6, y = -1.5, label = "Eligible (IPTW pseudo-population)",
+           fill = "#3B4992FF", color = "white", alpha = 0.8) + 
+  annotate(geom = "label", x = 0.3, y = -2.2, label = "Eligible (actual)",
+           fill = "grey", color = "white") +
+  geom_hline(yintercept = 0, color = "white", size = 0.25) + 
+  scale_y_continuous(label = abs) + 
+  theme_minimal(base_size = 14) + 
+  labs(x = "Propensity scores", y = "Kernel density") # PS distribution of unweighted and weighted populations
+```
+
+```{r patient_characteristics vio, include = FALSE}
+## unweighted patient characteristics ---------------------------
+reset_gtsummary_theme()
+uwtbl <- df %>% 
+  select(age, sex, ps_cat, bmi, smoking_cat, surgery, prim, visceral, liver, platinum_cat, chemo_bin, ppi, antibiotic, nlr, bajorin_score, vio_all) %>% 
+  tbl_summary(
+    by = vio_all, 
+    label = list(
+      age ~ "Age at baseline, year",
+      sex ~ "Sex",
+      ps_cat ~ "ECOG performance status",
+      bmi ~ "Body mass index",
+      surgery ~ "Previous radical surgery",
+      smoking_cat ~ "Smoking status",
+      prim ~ "Primary location of tumor",
+      visceral ~ "Location of metastasis",
+      liver ~ "Liver metastasis",
+      platinum_cat ~ "Platinum",
+      chemo_bin ~ "Most recent chemotherapy",
+      ppi ~ "Concomitant proton pump inhibitor use",
+      antibiotic ~ "Previous antibiotic use",
+      nlr ~ "Baseline neutrophil-to-lymphocyte ratio", 
+      bajorin_score ~ "Bajorin risk scores"
+    ),
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{n} ({p})"),
+    digits = list(all_continuous() ~ c(1, 1),
+                  all_categorical() ~ c(0, 1))
+  ) %>% 
+  add_overall() %>% 
+  add_difference(test = list(everything() ~ "smd")) %>% 
+  modify_column_hide(columns = ci)
+
+## weighted patient characteristics ---------------------------
+# for vio_all
+d_wgt <- survey::svydesign(ids = ~ id, weights = ~ wgt, data = df)
+wtbl <- d_wgt %>% 
+  tbl_svysummary(
+    by = vio_all, 
+    include = c(age, sex, ps_cat, bmi, smoking_cat, surgery, prim, visceral, liver, platinum_cat, chemo_bin, ppi, antibiotic, nlr, bajorin_score),
+    label = list(
+      age ~ "Age at baseline, year",
+      sex ~ "Sex",
+      ps_cat ~ "ECOG performance status",
+      bmi ~ "Body mass index",
+      surgery ~ "Previous radical surgery",
+      smoking_cat ~ "Smoking status",
+      prim ~ "Primary location of tumor",
+      visceral ~ "Location of metastasis",
+      liver ~ "Liver metastasis",
+      platinum_cat ~ "Platinum",
+      chemo_bin ~ "Most recent chemotherapy",
+      ppi ~ "Concomitant proton pump inhibitor use",
+      antibiotic ~ "Previous antibiotic use",
+      nlr ~ "Baseline neutrophil-to-lymphocyte ratio", 
+      bajorin_score ~ "Bajorin risk scores"
+    ),
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{p}"),
+    digits = list(all_continuous() ~ c(1, 1),
+                  all_categorical() ~ c(1, 1))
+  ) %>% 
+  add_difference(test = list(everything() ~ "smd")) %>% 
+  modify_column_hide(columns = ci)
+
+tbl <- tbl_merge(tbls = list(uwtbl, wtbl), 
+                 tab_spanner = c("**Unweighted population**", "**Weighted population**"))
+
+## weighted patient characteristics ---------------------------
+# for vio_all2
+uwtbl2 <- df_sub %>% 
+  select(age, sex, ps_cat, bmi, smoking_cat, surgery, prim, visceral, liver, platinum_cat, chemo_bin, ppi, antibiotic, nlr, bajorin_score, vio_prog_wo, vio_all2) %>% 
+  tbl_summary(
+    by = vio_all2, 
+    label = list(
+      age ~ "Age at baseline, year",
+      sex ~ "Sex",
+      ps_cat ~ "ECOG performance status",
+      bmi ~ "Body mass index",
+      surgery ~ "Previous radical surgery",
+      smoking_cat ~ "Smoking status",
+      prim ~ "Primary location of tumor",
+      visceral ~ "Location of metastasis",
+      liver ~ "Liver metastasis",
+      platinum_cat ~ "Platinum",
+      chemo_bin ~ "Most recent chemotherapy",
+      ppi ~ "Concomitant proton pump inhibitor use",
+      antibiotic ~ "Previous antibiotic use",
+      nlr ~ "Baseline neutrophil-to-lymphocyte ratio", 
+      bajorin_score ~ "Bajorin risk scores",
+      vio_prog_wo ~ "Progression following chemotherapy"
+    ),
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{n} ({p})"),
+    digits = list(all_continuous() ~ c(1, 1),
+                  all_categorical() ~ c(0, 1))
+  ) %>% 
+  add_overall() %>% 
+  add_difference(test = list(everything() ~ "smd")) %>% 
+  modify_column_hide(columns = ci)
+
+d_wgt <- survey::svydesign(ids = ~ id, weights = ~ wgt2, data = df_sub)
+wtbl2 <- d_wgt %>% 
+  tbl_svysummary(
+    by = vio_all2, 
+    include = c(age, sex, ps_cat, bmi, smoking_cat, surgery, prim, visceral, liver, platinum_cat, chemo_bin, ppi, antibiotic, nlr, bajorin_score, vio_prog_wo),
+    label = list(
+      age ~ "Age at baseline, year",
+      sex ~ "Sex",
+      ps_cat ~ "ECOG performance status",
+      bmi ~ "Body mass index",
+      surgery ~ "Previous radical surgery",
+      smoking_cat ~ "Smoking status",
+      prim ~ "Primary location of tumor",
+      visceral ~ "Location of metastasis",
+      liver ~ "Liver metastasis",
+      platinum_cat ~ "Platinum",
+      chemo_bin ~ "Most recent chemotherapy",
+      ppi ~ "Concomitant proton pump inhibitor use",
+      antibiotic ~ "Previous antibiotic use",
+      nlr ~ "Baseline neutrophil-to-lymphocyte ratio", 
+      bajorin_score ~ "Bajorin risk scores",
+      vio_prog_wo ~ "Progression following chemotherapy"
+    ),
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{p}"),
+    digits = list(all_continuous() ~ c(1, 1),
+                  all_categorical() ~ c(1, 1))
+  ) %>% 
+  add_difference(test = list(everything() ~ "smd")) %>% 
+  modify_column_hide(columns = ci)
+
+tbl2 <- tbl_merge(tbls = list(uwtbl2, wtbl2), 
+                  tab_spanner = c("**Unweighted population**", "**Weighted population**"))
+
+# treatment duration
+treatment_duration <- df %>% 
+  select(ttd, discont, vio_all) %>% 
+  tbl_summary(
+    by = vio_all, 
+    label = list(
+      ttd ~ "Treatment duration, month",
+      discont ~ "Treatment discontinuation"
+    ),
+    statistic = list(all_continuous() ~ "{median} ({p25}-{p75})",
+                     all_categorical() ~ "{n} ({p})"),
+    digits = list(all_continuous() ~ c(1, 1),
+                  all_categorical() ~ c(0, 1))
+  ) %>% add_p()
+
+reason_discontinue <- df %>% 
+  filter(!is.na(discont) & discont != "other") %>% 
+  select(discont, vio_all) %>% 
+  tbl_summary(
+    by = vio_all, 
+    label = list(
+      discont ~ "Treatment discontinuation"
+    ),
+    statistic = list(all_continuous() ~ "{median} ({p25}-{p75})",
+                     all_categorical() ~ "{n} ({p})"),
+    digits = list(all_continuous() ~ c(1, 1),
+                  all_categorical() ~ c(0, 1))
+  ) %>% add_p()
+```
+
+```{r logistic_regression, include = FALSE}
+
+# logistic regression model ---------------------------
+theme_gtsummary_journal(journal = "jama")
+log <- glm(vio_all_bin ~ 
+             age + sex + ps_cat + bmi + smoking_cat + surgery + prim + visceral + liver + platinum_cat + chemo_bin + ppi + antibiotic + nlr + bajorin_score,
+           data = df, family = binomial) %>%  # calculate PS using logistic regression model
+  tbl_regression(exponentiate = TRUE, 
+                 label = list(
+                   age ~ "Age at baseline, year",
+                   sex ~ "Sex",
+                   ps_cat ~ "ECOG performance status",
+                   bmi ~ "Body mass index",
+                   surgery ~ "Previous radical surgery",
+                   smoking_cat ~ "Smoking status",
+                   prim ~ "Primary location of tumor",
+                   visceral ~ "Location of metastasis",
+                   liver ~ "Liver metastasis",
+                   platinum_cat ~ "Platinum",
+                   chemo_bin ~ "Most recent chemotherapy",
+                   ppi ~ "Concomitant proton pump inhibitor use",
+                   antibiotic ~ "Previous antibiotic use",
+                   nlr ~ "Baseline neutrophil-to-lymphocyte ratio",
+                   bajorin_score ~ "Bajorin risk scores"
+                 )
+  ) 
+```
+
+```{r eligibility_criteria, include = FALSE}
+tbl_vio <- df %>% 
+  select(vio_uc, vio_prog_cat, vio_ps, vio_plat, vio_chf, vio_ild, vio_gc, vio_ctd, 
+         vio_neu, vio_plt, vio_hb, vio_egfr) %>% 
+  tbl_summary(
+    label = list(
+      vio_uc ~ "Patients without urothelial carcinoma histology",
+      vio_prog_cat ~ "patients not having had progression or recurrence of urothelial cancer\nfollowing receipt of afirstline platinum-containing regimen",
+      vio_ps ~ "Patients who did not have a performance status of 0, 1, or 2 on the ECOG Performance Scale,\nas assessed within 10 days prior to treatment initiation.\nSubjects with anECOG performance status of 2 must have a hemoglobin ≥10g/dL, must not have liver metastases,\nand must have received the last dose of their last prior chemotherapy regimen.",
+      vio_plat ~ "Patients receiving platinum-base chemotherapy other than cisplatin or carboplatin as a first-line therapy",
+      vio_chf ~ "Patients with NYHA class 3 or more congestive heart failure,\nor left ventricular ejection fraction of < 40%",
+      vio_ild ~ "Patients who has evidence of interstitial lung disease or active non-infectious pneumonitis",
+      vio_gc ~ "Patients who were receiving systemic steroid therapy\nor any other form of immunosuppressive therapy.",
+      vio_ctd ~ "Patients with a syndrome that requires systemic or immunosuppressive agents",
+      vio_neu ~ "Neutrophil count less than 1500/mcL",
+      vio_plt ~ "Platelet count less than 100,000/mcL",
+      vio_hb ~ "Hemoglobin concentration less than 9.0 g/dL",
+      vio_egfr ~ "estimated GFR of ≤1.5x ULN OR ≥30 mL/min for subjects with creatinine levels >1.5x institutional ULN"
+    ),
+    statistic = all_categorical() ~ "{n} ({p})",
+    digits = all_categorical() ~ c(0, 1)
+  )
+```
+
+```{r logistic_regression_for_or, include = FALSE}
+# treatment response data
+num_ior = df %>% filter(ibor == "iPR" | ibor == "iCR") %>% count() %>% as.numeric()
+freq_ior = (100 * num_ior / df %>% count()) %>% as.numeric() %>% round(digits = 1)
+
+# stacked bar charts
+df$ibor <- factor(df$ibor, 
+                  levels = c("iCPD", "iUPD", "iSD", "iPR", "iCR")) # change order
+
+prop.res <- df %>% 
+  group_by(vio_all, ibor) %>% 
+  summarise(n = n()) %>% 
+  mutate(percent = paste0(round(n / sum(n) * 100, 1), '%'), 
+         freq = n / sum(n) * 100, 
+         pos = cumsum(freq) - 0.5 * freq)
+
+prop.res$response <- factor(prop.res$ibor, levels = c("iCR", "iPR", "iSD", "iUPD", "iCPD")) # change order
+
+bar <- ggplot2::ggplot() + 
+  ggplot2::theme_minimal(base_size = 15) +
+  ggplot2::geom_bar(ggplot2::aes(y = freq, x = vio_all, fill = response), data = prop.res, stat = "identity") + 
+  scale_fill_viridis(discrete = TRUE, option = "G", begin = 0, end = 0.8) + 
+  ggplot2::labs(x = "Ineligible patient", 
+                y = "Proportion of patients with the best overall response") + 
+  geom_text(data = prop.res, aes(x = vio_all, y = pos, label = percent), size = 4.5, color = "white")
+bar # show stacked bar chart
+
+# logistic regression model ---------------------------
+theme_gtsummary_journal(journal = "jama")
+log_or <- glm(ior_bin ~ 
+                vio_all, data = df, family = binomial, weights = wgt) %>%  
+  
+  # calculate PS using logistic regression model
+  
+  tbl_regression(exponentiate = TRUE, 
+                 label = list(
+                   vio_all ~ "Patients who were ineligible"
+                 )
+  ) 
+
+# logistic regression model for vio_all2...---------------------------
+theme_gtsummary_journal(journal = "jama")
+log_or2 <- glm(ior_bin ~ 
+                 vio_all2, data = df_sub, family = binomial, weights = wgt2) %>%  
+  
+  # calculate PS using logistic regression model
+  
+  tbl_regression(exponentiate = TRUE, 
+                 label = list(
+                   vio_all2 ~ "Patients who were ineligible"
+                 )
+  ) 
+```
+
+```{r Kaplan_Meier_estimates, include = FALSE}
+# Crude
+# progression-free survival
+pfs_fit <- survival::survfit(data = df, Surv(ttp, prog_bin) ~ vio_all)
+pfs_crude <- survminer::ggsurvplot(pfs_fit, 
+                                   risk.table = TRUE, font.tickslab = 12, font.x = 12, font.y = 12,
+                                   title = "PFS, Crude", 
+                                   legend = "top", legend.labs = c("Yes", "No"), 
+                                   legend.title = "KEYNOTE-045 eligibility", 
+                                   censor = TRUE, censor.shape = "O", censor.size = 3,
+                                   xlab = "Time from treatment initiation, month", 
+                                   ylab = "Progression-free survival\nprobability",
+                                   palette = "aaas", size = 0.6,  break.time.by = 6,
+                                   ggtheme = theme_jikei(), risk.table.title = "Number at risk",
+                                   risk.table.col = "strata",
+                                   tables.height = 0.15, risk.table.fontsize = 4.5,
+                                   tables.theme = survminer::theme_cleantable()) 
+
+pfs_crude$table <- pfs_crude$table + 
+    theme_void(base_size = 9) + 
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) # replace table
+
+# overall survival
+os_fit <- survival::survfit(data = df, Surv(fu, death_bin) ~ vio_all)
+os_crude <- survminer::ggsurvplot(os_fit, 
+                                  risk.table = TRUE, font.tickslab = 12, font.x = 12, font.y = 12,
+                                  title = "OS, Crude", 
+                                  legend = "top", legend.labs = c("Yes", "No"), 
+                                  legend.title = "KEYNOTE-045 eligibility", 
+                                  censor = TRUE, censor.shape = "O", censor.size = 3,
+                                  xlab = "Time from treatment initiation, month", 
+                                  ylab = "Overall survival\nprobability",
+                                  palette = "aaas", size = 0.6,  break.time.by = 6,
+                                  ggtheme = theme_jikei(), risk.table.title = "Number at risk",
+                                  risk.table.col = "strata",
+                                  tables.height = 0.15, risk.table.fontsize = 4.5,
+                                  tables.theme = survminer::theme_cleantable()) 
+
+os_crude$table <- os_crude$table + 
+    theme_void(base_size = 9) + 
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) # replace table
+
+# IPW-adjusted 
+# progression-free survival
+pfs_fit <- survival::survfit(data = df, Surv(ttp, prog_bin) ~ vio_all, weight = wgt)
+pfs_ipw <- survminer::ggsurvplot(pfs_fit, 
+                                 risk.table = TRUE, font.tickslab = 12, font.x = 12, font.y = 12,
+                                 title = "PFS, IPTW-adjusted", 
+                                 legend = "top", legend.labs = c("Yes", "No"), 
+                                 legend.title = "KEYNOTE-045 eligibility", 
+                                 censor = TRUE, censor.shape = "O", censor.size = 3,
+                                 xlab = "Time from treatment initiation, month", 
+                                 ylab = "Progression-free survival\nprobability",
+                                 palette = "aaas", size = 0.6,  break.time.by = 6,
+                                 ggtheme = theme_jikei(), risk.table.title = "Number at risk",
+                                 risk.table.col = "strata",
+                                 tables.height = 0.15, risk.table.fontsize = 4.5,
+                                 tables.theme = survminer::theme_cleantable()) 
+
+pfs_ipw$table <- pfs_ipw$table + 
+    theme_void(base_size = 9) + 
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) # replace table
+
+# overall survival
+os_fit <- survival::survfit(data = df, Surv(fu, death_bin) ~ vio_all, weight = wgt)
+os_ipw <- survminer::ggsurvplot(os_fit, 
+                                risk.table = TRUE, font.tickslab = 12, font.x = 12, font.y = 12,
+                                title = "OS, IPTW-adjusted", 
+                                legend = "top", legend.labs = c("Yes", "No"), 
+                                legend.title = "KEYNOTE-045 eligibility", 
+                                censor = TRUE, censor.shape = "O", censor.size = 3,
+                                xlab = "Time from treatment initiation, month", 
+                                ylab = "Overall survival\nprobability",
+                                palette = "aaas", size = 0.6,  break.time.by = 6,
+                                ggtheme = theme_jikei(), risk.table.title = "Number at risk",
+                                risk.table.col = "strata",
+                                tables.height = 0.15, risk.table.fontsize = 4.5,
+                                tables.theme = survminer::theme_cleantable()) 
+
+os_ipw$table <- os_ipw$table + 
+    theme_void(base_size = 9) + 
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) # replace table
+
+merge <- survminer::arrange_ggsurvplots(list(pfs_crude, os_crude), 
+                                        print = FALSE, 
+                                        nrow = 1, ncol = 2)
+
+merge <- survminer::arrange_ggsurvplots(list(pfs_ipw, os_ipw), 
+                                        print = FALSE, 
+                                        nrow = 1, ncol = 2)
+
+merge <- survminer::arrange_ggsurvplots(list(pfs_crude, pfs_ipw, os_crude, os_ipw), 
+                                        print = FALSE, 
+                                        nrow = 2, ncol = 2)
+
+# survival, Crude
+pfs_time_crude <- survfit(survival::Surv(ttp, prog_bin) ~ vio_all, data = df)
+os_time_crude <- survfit(survival::Surv(fu, death_bin) ~ vio_all, data = df)
+
+# survival, IPW-adjusted
+pfs_time_ipw <- survfit(survival::Surv(ttp, prog_bin) ~ vio_all, data = df, weights = wgt)
+os_time_ipw <- survfit(survival::Surv(fu, death_bin) ~ vio_all, data = df, weights = wgt)
+
+# log-rank test
+pval_pfs_crude <- survdiff(survival::Surv(ttp, prog_bin) ~ vio_all, data = df)
+pval_os_crude <- survdiff(survival::Surv(fu, death_bin) ~ vio_all, data = df)
+
+# weighted log-rank test using RISCA package
+pval_pfs <- RISCA::ipw.log.rank(times = df$ttp, 
+                                failures = df$prog_bin,
+                                variable = df$vio_all_bin,
+                                weights = df$wgt)
+
+pval_os <- RISCA::ipw.log.rank(times = df$fu, 
+                               failures = df$death_bin,
+                               variable = df$vio_all_bin,
+                               weights = df$wgt)
+
+
+# for vio_all2...
+# Crude
+# progression-free survival
+pfs_fit <- survival::survfit(data = df_sub, Surv(ttp, prog_bin) ~ vio_all2)
+pfs_crude <- survminer::ggsurvplot(pfs_fit, 
+                                   risk.table = TRUE, font.tickslab = 12, font.x = 12, font.y = 12,
+                                   title = "PFS, Crude", 
+                                   legend = "top", legend.labs = c("Yes", "No"), 
+                                   legend.title = "KEYNOTE-045 eligibility", 
+                                   censor = TRUE, censor.shape = "O", censor.size = 3,
+                                   xlab = "Time from treatment initiation, month", 
+                                   ylab = "Progression-free survival\nprobability",
+                                   palette = "aaas", size = 0.6,  break.time.by = 6,
+                                   ggtheme = theme_classic(), risk.table.title = "Number at risk",
+                                   risk.table.col = "strata",
+                                   tables.height = 0.2, risk.table.fontsize = 4.5,
+                                   tables.theme = survminer::theme_cleantable()) 
+
+pfs_crude$table <- pfs_crude$table + 
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) # replace table
+
+# overall survival
+os_fit <- survival::survfit(data = df_sub, Surv(fu, death_bin) ~ vio_all2)
+os_crude <- survminer::ggsurvplot(os_fit, 
+                                  risk.table = TRUE, font.tickslab = 12, font.x = 12, font.y = 12,
+                                  title = "OS, Crude", 
+                                  legend = "top", legend.labs = c("Yes", "No"), 
+                                  legend.title = "KEYNOTE-045 eligibility", 
+                                  censor = TRUE, censor.shape = "O", censor.size = 3,
+                                  xlab = "Time from treatment initiation, month", 
+                                  ylab = "Overall survival\nprobability",
+                                  palette = "aaas", size = 0.6,  break.time.by = 6,
+                                  ggtheme = theme_classic(), risk.table.title = "Number at risk",
+                                  risk.table.col = "strata",
+                                  tables.height = 0.2, risk.table.fontsize = 4.5,
+                                  tables.theme = survminer::theme_cleantable()) 
+
+os_crude$table <- os_crude$table + 
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) # replace table
+
+# IPW-adjusted 
+# progression-free survival
+pfs_fit <- survival::survfit(data = df_sub, Surv(ttp, prog_bin) ~ vio_all2, weight = wgt2)
+pfs_ipw <- survminer::ggsurvplot(pfs_fit, 
+                                 risk.table = TRUE, font.tickslab = 12, font.x = 12, font.y = 12,
+                                 title = "PFS, IPTW-adjusted", 
+                                 legend = "top", legend.labs = c("Yes", "No"), 
+                                 legend.title = "KEYNOTE-045 eligibility", 
+                                 censor = TRUE, censor.shape = "O", censor.size = 3,
+                                 xlab = "Time from treatment initiation, month", 
+                                 ylab = "Progression-free survival\nprobability",
+                                 palette = "aaas", size = 0.6,  break.time.by = 6,
+                                 ggtheme = theme_classic(), risk.table.title = "Number at risk",
+                                 risk.table.col = "strata",
+                                 tables.height = 0.2, risk.table.fontsize = 4.5,
+                                 tables.theme = survminer::theme_cleantable()) 
+
+# for unweighted number at risk
+tbl_pfs_fit <- survival::survfit(data = df_sub, Surv(ttp, prog_bin) ~ vio_all2)
+tbl_pfs <- survminer::ggsurvplot(tbl_pfs_fit, 
+                                 risk.table = TRUE, palette = "aaas",
+                                 ggtheme = theme_classic(), risk.table.title = "Number at risk",
+                                 risk.table.col = "strata", break.time.by = 6,
+                                 tables.height = 0.2, risk.table.fontsize = 4.5,
+                                 tables.theme = survminer::theme_cleantable()) 
+
+pfs_ipw$table <- tbl_pfs$table + 
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) # replace table
+
+# overall survival
+os_fit <- survival::survfit(data = df_sub, Surv(fu, death_bin) ~ vio_all2, weight = wgt2)
+os_ipw <- survminer::ggsurvplot(os_fit, 
+                                risk.table = TRUE, font.tickslab = 12, font.x = 12, font.y = 12,
+                                title = "OS, IPTW-adjusted", 
+                                legend = "top", legend.labs = c("Yes", "No"), 
+                                legend.title = "KEYNOTE-045 eligibility", 
+                                censor = TRUE, censor.shape = "O", censor.size = 3,
+                                xlab = "Time from treatment initiation, month", 
+                                ylab = "Overall survival\nprobability",
+                                palette = "aaas", size = 0.6,  break.time.by = 6,
+                                ggtheme = theme_classic(), risk.table.title = "Number at risk",
+                                risk.table.col = "strata",
+                                tables.height = 0.2, risk.table.fontsize = 4.5,
+                                tables.theme = survminer::theme_cleantable()) 
+
+# for unweighted number at risk
+tbl_os_fit <- survival::survfit(data = df_sub, Surv(fu, death_bin) ~ vio_all2)
+tbl_os <- survminer::ggsurvplot(tbl_os_fit, 
+                                risk.table = TRUE, palette = "aaas",
+                                ggtheme = theme_classic(), risk.table.title = "Number at risk",
+                                risk.table.col = "strata", break.time.by = 6,
+                                tables.height = 0.2, risk.table.fontsize = 4.5,
+                                tables.theme = survminer::theme_cleantable()) 
+
+os_ipw$table <- tbl_os$table + 
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) # replace table
+
+merge2 <- survminer::arrange_ggsurvplots(list(pfs_crude, pfs_ipw, os_crude, os_ipw), 
+                                         print = FALSE, 
+                                         nrow = 2, ncol = 2)
+
+# survival, Crude
+pfs_time_crude <- survfit(survival::Surv(ttp, prog_bin) ~ vio_all2, data = df_sub)
+os_time_crude <- survfit(survival::Surv(fu, death_bin) ~ vio_all2, data = df_sub)
+
+# survival, IPW-adjusted
+pfs_time_ipw <- survfit(survival::Surv(ttp, prog_bin) ~ vio_all2, data = df_sub, weights = wgt2)
+os_time_ipw <- survfit(survival::Surv(fu, death_bin) ~ vio_all2, data = df_sub, weights = wgt2)
+
+
+# log-rank test
+pval_pfs_crude <- survdiff(survival::Surv(ttp, prog_bin) ~ vio_all2, data = df_sub)
+pval_os_crude <- survdiff(survival::Surv(fu, death_bin) ~ vio_all2, data = df_sub)
+
+# weighted log-rank test using RISCA package
+pval_pfs <- RISCA::ipw.log.rank(times = df_sub$ttp, 
+                                failures = df_sub$prog_bin,
+                                variable = df_sub$vio_all2_bin,
+                                weights = df_sub$wgt2)
+
+pval_os <- RISCA::ipw.log.rank(times = df_sub$fu, 
+                               failures = df_sub$death_bin,
+                               variable = df_sub$vio_all2_bin,
+                               weights = df_sub$wgt2)
+```
+
+```{r RMST_analysis_for_vio_all, include = FALSE}
+# RMST differences at specific times
+# time-to-event distribution data
+fit_os <- survfit(survival::Surv(fu, death_bin) ~ 1, data = df)
+max_time_death = max(summary(fit_os)$time) %>% as.numeric() %>% round(digits = 1) # the time of last observed event (all-cause death) 
+
+fit_pfs <- survfit(survival::Surv(ttp, prog_bin) ~ 1, data = df)
+max_time_prog = max(summary(fit_pfs)$time) %>% as.numeric() %>% round(digits = 1) # the time of last observed event (progression)
+
+# calculate IPW-adjusted RMST using akm_rmst
+rmst_diff_os <- akm_rmst(time = df$fu, 
+                         status = df$death_bin, 
+                         group = as.factor(df$vio_all), 
+                         weight = df$wgt, 
+                         tau = 41.1) %>% 
+  round(digits = 1)
+
+rmst_diff_pfs <- akm_rmst(time = df$ttp, 
+                          status = df$prog_bin, 
+                          group = as.factor(df$vio_all), 
+                          weight = df$wgt, 
+                          tau = 41.1) %>% 
+  round(digits = 1)
+
+# RMST calculation and comparison
+d_rmst <- df %>% 
+  select(fu, ttp, death_bin, prog_bin, ttcp, cprog_bin, vio_all_bin, wgt) %>% 
+  arrange(vio_all_bin) %>% 
+  as.data.frame() 
+
+d_rmst$vio_all_bin <- as.factor(d_rmst$vio_all_bin)
+
+# restricted mean survival time for progression-free survival ----------
+armst_pfs <- function(tau) {
+  j = length(unique(d_rmst$vio_all_bin))
+  
+  rmst <- rep(999, length(1:j))
+  groupval <- rep(999, length(1:j))
+  rmst_var <- rep(999, length(1:j))
+  rmst_se <- rep(999, length(1:j))
+  
+  for (i in 1:j){
+    groupval[i] <- (levels(d_rmst$vio_all_bin)[i])
+    dat_group <- d_rmst[which(d_rmst$vio_all_bin == (groupval[i])),]
+    
+    #--- AKM ---
+    # Based on 'adjusted.KM' function from {IPWsurvival} package
+    # Author: F. Le Borgne and Y. Foucher
+    tj <- c(0, sort(unique(dat_group$ttp[dat_group$prog_bin == 1])))
+    dj <- sapply(tj, function(x) {sum(dat_group$wgt[dat_group$ttp == x & dat_group$prog_bin == 1])})
+    yj <- sapply(tj, function(x) {sum(dat_group$wgt[dat_group$ttp >= x])})
+    st <- cumprod(1 - (dj/yj))
+    m <- sapply(tj, function(x) {sum((dat_group$wgt[dat_group$ttp >= x])^2)})
+    mj <- ((yj^2)/m)
+    #ft <- data.frame(time = tj, n_risk = yj, n_event = dj, survival = st, variable = i, m = mj)
+    ft <- data.frame(tj, yj, dj, st, i, mj)
+    
+    #--- RMST ---
+    # Based on 'rmst1 function' from {survRM2} package
+    # Author: Hajime Uno, Lu Tian, Angel Cronin, Chakib Battioui, Miki Horiguchi
+    rtime <- ft$tj <= tau
+    tj_r <- sort(c(ft$tj[rtime], tau))
+    st_r <- ft$st[rtime]
+    yj_r <- ft$yj[rtime]
+    dj_r <- ft$dj[rtime]
+    time_diff <- diff(c(0, tj_r))
+    areas <- time_diff * c(1, st_r)
+    rmst[i] <- sum(areas)
+    
+    mj_r <- ft$mj[rtime]
+    var_r <- ifelse((yj_r-dj_r)　==　0, 0, dj_r /　(mj_r *　(yj_r - dj_r)))
+    #var_r <- ifelse((yj_r-dj_r)==0, 0, dj_r /(yj_r *(yj_r - dj_r)))
+    var_r <- c(var_r,　0)
+    rmst_var[i] <- sum(cumsum(rev(areas[-1])) ^ 2 * rev(var_r)[-1])
+    rmst_se[i] <- sqrt(rmst_var[i])
+  }
+  
+  # --- Compare RMST between groups and compile output---
+  
+  output <- tibble(rmst = 0, 
+                   lcl = 0, 
+                   ucl = 0)
+  
+  output$rmst <- rmst[2] - rmst[1] # no = 1, yes = 2
+  output$lcl <- rmst[2] - rmst[1] - qnorm(1 - 0.05 / 2) * sqrt(rmst_var[2] + rmst_var[1]) # no = 1, yes = 2
+  output$ucl <- rmst[2] - rmst[1] + qnorm(1 - 0.05 / 2) * sqrt(rmst_var[2] + rmst_var[1]) # no = 1, yes = 2
+  
+  print(output)
+}
+
+data_rmst <- data.frame()
+for(i in seq(from = 0, to = 41.1, by = 0.01)) {
+  data_rmst = rbind(data_rmst, armst_pfs(i))
+}
+
+tau_vec <- as.data.frame(seq(from = 0, to = 41.1, by = 0.01))
+
+plot_rmst <- cbind(tau_vec, data_rmst)
+colnames(plot_rmst)[1] <- "tau"
+colnames(plot_rmst)[2] <- "rmst"
+colnames(plot_rmst)[3] <- "lcl"
+colnames(plot_rmst)[4] <- "ucl"
+
+# plot RMST difference for IPW-adjusted model for PFS
+rmst_plot_pfs <- plot_rmst %>% 
+  ggplot(data = ., aes(x = tau)) +
+  geom_smooth(aes(y = rmst), size = 0.8) +
+  geom_ribbon(aes(ymin = lcl, ymax = ucl), alpha = 0.6, fill = "#3C5488FF") +
+  scale_y_continuous(limits = c(-10, 10), breaks = seq(from = -10, to = 10, by = 2)) +
+  scale_x_continuous(limits = c(0, 41.1), breaks = seq(from = 0, to = 41.1, by = 4)) +
+  geom_hline(aes(yintercept = 0), lty = "dashed") +
+  labs(x = "Time from treatment initiation, month", 
+       y = "Difference in RMST (95% CI), month") +
+  theme_minimal() +
+  ggtitle("Progression-free survival") +
+  theme(text = element_text(size = 16),
+        axis.title.x =element_text(hjust = 0.5, size = 16),
+        plot.title = element_text(size = 16)) + 
+  guides(fill = guide_legend(nrow = 2)) 
+
+# restricted mean survival time for overall survival
+armst_os <- function(tau) {
+  j = length(unique(d_rmst$vio_all_bin))
+  
+  rmst <- rep(999, length(1:j))
+  groupval <- rep(999, length(1:j))
+  rmst_var <- rep(999, length(1:j))
+  rmst_se <- rep(999, length(1:j))
+  
+  for (i in 1:j){
+    groupval[i] <- (levels(d_rmst$vio_all_bin)[i])
+    dat_group <- d_rmst[which(d_rmst$vio_all_bin == (groupval[i])),]
+    
+    #--- AKM ---
+    # Based on 'adjusted.KM' function from {IPWsurvival} package
+    # Author: F. Le Borgne and Y. Foucher
+    tj <- c(0, sort(unique(dat_group$fu[dat_group$death_bin == 1])))
+    dj <- sapply(tj, function(x) {sum(dat_group$wgt[dat_group$fu == x & dat_group$death_bin == 1])})
+    yj <- sapply(tj, function(x) {sum(dat_group$wgt[dat_group$fu >= x])})
+    st <- cumprod(1 - (dj/yj))
+    m <- sapply(tj, function(x) {sum((dat_group$wgt[dat_group$fu >= x])^2)})
+    mj <- ((yj^2)/m)
+    #ft <- data.frame(time = tj, n_risk = yj, n_event = dj, survival = st, variable = i, m = mj)
+    ft <- data.frame(tj, yj, dj, st, i, mj)
+    
+    #--- RMST ---
+    # Based on 'rmst1 function' from {survRM2} package
+    # Author: Hajime Uno, Lu Tian, Angel Cronin, Chakib Battioui, Miki Horiguchi
+    rtime <- ft$tj <= tau
+    tj_r <- sort(c(ft$tj[rtime], tau))
+    st_r <- ft$st[rtime]
+    yj_r <- ft$yj[rtime]
+    dj_r <- ft$dj[rtime]
+    time_diff <- diff(c(0, tj_r))
+    areas <- time_diff * c(1, st_r)
+    rmst[i] <- sum(areas)
+    
+    mj_r <- ft$mj[rtime]
+    var_r <- ifelse((yj_r-dj_r)　==　0, 0, dj_r /　(mj_r *　(yj_r - dj_r)))
+    #var_r <- ifelse((yj_r-dj_r)==0, 0, dj_r /(yj_r *(yj_r - dj_r)))
+    var_r <- c(var_r,　0)
+    rmst_var[i] <- sum(cumsum(rev(areas[-1])) ^ 2 * rev(var_r)[-1])
+    rmst_se[i] <- sqrt(rmst_var[i])
+  }
+  
+  # --- Compare RMST between groups and compile output---
+  
+  output <- tibble(rmst = 0, 
+                   lcl = 0, 
+                   ucl = 0)
+  
+  output$rmst <- rmst[2] - rmst[1] # no = 1, yes = 2
+  output$lcl <- rmst[2] - rmst[1] - qnorm(1 - 0.05 / 2) * sqrt(rmst_var[2] + rmst_var[1]) # no = 1, yes = 2
+  output$ucl <- rmst[2] - rmst[1] + qnorm(1 - 0.05 / 2) * sqrt(rmst_var[2] + rmst_var[1]) # no = 1, yes = 2
+  
+  print(output)
+}
+
+data_rmst <- data.frame()
+for(i in seq(from = 0, to = 41.1, by = 0.01)) {
+  data_rmst = rbind(data_rmst, armst_os(i))
+}
+
+tau_vec <- as.data.frame(seq(from = 0, to = 41.1, by = 0.01))
+
+plot_rmst <- cbind(tau_vec, data_rmst)
+colnames(plot_rmst)[1] <- "tau"
+colnames(plot_rmst)[2] <- "rmst"
+colnames(plot_rmst)[3] <- "lcl"
+colnames(plot_rmst)[4] <- "ucl"
+
+# plot RMST difference for IPW-adjusted model for OS
+rmst_plot_os <- plot_rmst %>% 
+  ggplot(data = ., aes(x = tau)) +
+  geom_smooth(aes(y = rmst), size = 0.8) +
+  geom_ribbon(aes(ymin = lcl, ymax = ucl), alpha = 0.6, fill = "#3C5488FF") +
+  scale_y_continuous(limits = c(-10, 10), breaks = seq(from = -10, to = 10, by = 2)) +
+  scale_x_continuous(limits = c(0, 41.1), breaks = seq(from = 0, to = 41.1, by = 4)) +
+  geom_hline(aes(yintercept = 0), lty = "dashed") +
+  labs(x = "Time from treatment initiation, month", 
+       y = "Difference in RMST (95% CI), month") +
+  theme_minimal() +
+  ggtitle("Overall survival") +
+  theme(text = element_text(size = 16),
+        axis.title.x =element_text(hjust = 0.5, size = 16),
+        plot.title = element_text(size = 16)) + 
+  guides(fill = guide_legend(nrow = 2)) 
+
+merge <- ggarrange(rmst_plot_pfs, rmst_plot_os,
+                   ncol = 2)
+```
+
+```{r RMST_analysis_for_vio_all2, include = FALSE}
+# RMST differences at specific times
+# time-to-event distribution data
+fit_os <- survfit(survival::Surv(fu, death_bin) ~ 1, data = df_sub)
+max_time_death = max(summary(fit_os)$time) %>% as.numeric() %>% round(digits = 1) # the time of last observed event (all-cause death) 
+
+fit_pfs <- survfit(survival::Surv(ttp, prog_bin) ~ 1, data = df_sub)
+max_time_prog = max(summary(fit_pfs)$time) %>% as.numeric() %>% round(digits = 1) # the time of last observed event (progression)
+
+# RMST differences at specific times
+# calculate IPW-adjusted RMST using akm_rmst
+rmst_diff_os <- akm_rmst(time = df_sub$fu, 
+                         status = df_sub$death_bin, 
+                         group = as.factor(df_sub$vio_all2), 
+                         weight = df_sub$wgt2, 
+                         tau = 41.1) %>% 
+  round(digits = 1)
+
+rmst_diff_pfs <- akm_rmst(time = df_sub$ttp, 
+                          status = df_sub$prog_bin, 
+                          group = as.factor(df_sub$vio_all2), 
+                          weight = df_sub$wgt2,
+                          tau = 41.1) %>% 
+  round(digits = 1)
+
+# RMST calculation and comparison
+d_rmst <- df_sub %>% 
+  select(fu, ttp, death_bin, prog_bin, ttcp, cprog_bin, vio_all2_bin, wgt2) %>% 
+  arrange(vio_all2_bin) %>% 
+  as.data.frame() 
+
+d_rmst$vio_all2_bin <- as.factor(d_rmst$vio_all2_bin)
+
+# restricted mean survival time for progression-free survival ----------
+armst_pfs <- function(tau) {
+  j = length(unique(d_rmst$vio_all2_bin))
+  
+  rmst <- rep(999, length(1:j))
+  groupval <- rep(999, length(1:j))
+  rmst_var <- rep(999, length(1:j))
+  rmst_se <- rep(999, length(1:j))
+  
+  for (i in 1:j){
+    groupval[i] <- (levels(d_rmst$vio_all2_bin)[i])
+    dat_group <- d_rmst[which(d_rmst$vio_all2_bin == (groupval[i])),]
+    
+    #--- AKM ---
+    # Based on 'adjusted.KM' function from {IPWsurvival} package
+    # Author: F. Le Borgne and Y. Foucher
+    tj <- c(0, sort(unique(dat_group$ttp[dat_group$prog_bin == 1])))
+    dj <- sapply(tj, function(x) {sum(dat_group$wgt2[dat_group$ttp == x & dat_group$prog_bin == 1])})
+    yj <- sapply(tj, function(x) {sum(dat_group$wgt2[dat_group$ttp >= x])})
+    st <- cumprod(1 - (dj/yj))
+    m <- sapply(tj, function(x) {sum((dat_group$wgt2[dat_group$ttp >= x])^2)})
+    mj <- ((yj^2)/m)
+    #ft <- data.frame(time = tj, n_risk = yj, n_event = dj, survival = st, variable = i, m = mj)
+    ft <- data.frame(tj, yj, dj, st, i, mj)
+    
+    #--- RMST ---
+    # Based on 'rmst1 function' from {survRM2} package
+    # Author: Hajime Uno, Lu Tian, Angel Cronin, Chakib Battioui, Miki Horiguchi
+    rtime <- ft$tj <= tau
+    tj_r <- sort(c(ft$tj[rtime], tau))
+    st_r <- ft$st[rtime]
+    yj_r <- ft$yj[rtime]
+    dj_r <- ft$dj[rtime]
+    time_diff <- diff(c(0, tj_r))
+    areas <- time_diff * c(1, st_r)
+    rmst[i] <- sum(areas)
+    
+    mj_r <- ft$mj[rtime]
+    var_r <- ifelse((yj_r-dj_r)　==　0, 0, dj_r /　(mj_r *　(yj_r - dj_r)))
+    #var_r <- ifelse((yj_r-dj_r)==0, 0, dj_r /(yj_r *(yj_r - dj_r)))
+    var_r <- c(var_r,　0)
+    rmst_var[i] <- sum(cumsum(rev(areas[-1])) ^ 2 * rev(var_r)[-1])
+    rmst_se[i] <- sqrt(rmst_var[i])
+  }
+  
+  # --- Compare RMST between groups and compile output---
+  
+  output <- tibble(rmst = 0, 
+                   lcl = 0, 
+                   ucl = 0)
+  
+  output$rmst <- rmst[2] - rmst[1] # no = 1, yes = 2
+  output$lcl <- rmst[2] - rmst[1] - qnorm(1 - 0.05 / 2) * sqrt(rmst_var[2] + rmst_var[1]) # no = 1, yes = 2
+  output$ucl <- rmst[2] - rmst[1] + qnorm(1 - 0.05 / 2) * sqrt(rmst_var[2] + rmst_var[1]) # no = 1, yes = 2
+  
+  print(output)
+}
+
+data_rmst <- data.frame()
+for(i in seq(from = 0, to = 41.1, by = 0.01)) {
+  data_rmst = rbind(data_rmst, armst_pfs(i))
+}
+
+tau_vec <- as.data.frame(seq(from = 0, to = 41.1, by = 0.01))
+
+plot_rmst <- cbind(tau_vec, data_rmst)
+colnames(plot_rmst)[1] <- "tau"
+colnames(plot_rmst)[2] <- "rmst"
+colnames(plot_rmst)[3] <- "lcl"
+colnames(plot_rmst)[4] <- "ucl"
+
+# plot RMST difference for IPW-adjusted model for PFS
+rmst_plot_pfs <- plot_rmst %>% 
+  ggplot(data = ., aes(x = tau)) +
+  geom_smooth(aes(y = rmst), size = 0.8) +
+  geom_ribbon(aes(ymin = lcl, ymax = ucl), alpha = 0.6, fill = "#3C5488FF") +
+  scale_y_continuous(limits = c(-10, 10), breaks = seq(from = -10, to = 10, by = 2)) +
+  scale_x_continuous(limits = c(0, 41.1), breaks = seq(from = 0, to = 41.1, by = 4)) +
+  geom_hline(aes(yintercept = 0), lty = "dashed") +
+  labs(x = "Time from treatment initiation, month", 
+       y = "Difference in RMST (95% CI), month") +
+  theme_minimal() +
+  ggtitle("Progression-free survival") +
+  theme(text = element_text(size = 16),
+        axis.title.x =element_text(hjust = 0.5, size = 16),
+        plot.title = element_text(size = 16)) + 
+  guides(fill = guide_legend(nrow = 2)) 
+
+# restricted mean survival time for overall survival
+armst_os <- function(tau) {
+  j = length(unique(d_rmst$vio_all2_bin))
+  
+  rmst <- rep(999, length(1:j))
+  groupval <- rep(999, length(1:j))
+  rmst_var <- rep(999, length(1:j))
+  rmst_se <- rep(999, length(1:j))
+  
+  for (i in 1:j){
+    groupval[i] <- (levels(d_rmst$vio_all2_bin)[i])
+    dat_group <- d_rmst[which(d_rmst$vio_all2_bin == (groupval[i])),]
+    
+    #--- AKM ---
+    # Based on 'adjusted.KM' function from {IPWsurvival} package
+    # Author: F. Le Borgne and Y. Foucher
+    tj <- c(0, sort(unique(dat_group$fu[dat_group$death_bin == 1])))
+    dj <- sapply(tj, function(x) {sum(dat_group$wgt2[dat_group$fu == x & dat_group$death_bin == 1])})
+    yj <- sapply(tj, function(x) {sum(dat_group$wgt2[dat_group$fu >= x])})
+    st <- cumprod(1 - (dj/yj))
+    m <- sapply(tj, function(x) {sum((dat_group$wgt2[dat_group$fu >= x])^2)})
+    mj <- ((yj^2)/m)
+    #ft <- data.frame(time = tj, n_risk = yj, n_event = dj, survival = st, variable = i, m = mj)
+    ft <- data.frame(tj, yj, dj, st, i, mj)
+    
+    #--- RMST ---
+    # Based on 'rmst1 function' from {survRM2} package
+    # Author: Hajime Uno, Lu Tian, Angel Cronin, Chakib Battioui, Miki Horiguchi
+    rtime <- ft$tj <= tau
+    tj_r <- sort(c(ft$tj[rtime], tau))
+    st_r <- ft$st[rtime]
+    yj_r <- ft$yj[rtime]
+    dj_r <- ft$dj[rtime]
+    time_diff <- diff(c(0, tj_r))
+    areas <- time_diff * c(1, st_r)
+    rmst[i] <- sum(areas)
+    
+    mj_r <- ft$mj[rtime]
+    var_r <- ifelse((yj_r-dj_r)　==　0, 0, dj_r /　(mj_r *　(yj_r - dj_r)))
+    #var_r <- ifelse((yj_r-dj_r)==0, 0, dj_r /(yj_r *(yj_r - dj_r)))
+    var_r <- c(var_r,　0)
+    rmst_var[i] <- sum(cumsum(rev(areas[-1])) ^ 2 * rev(var_r)[-1])
+    rmst_se[i] <- sqrt(rmst_var[i])
+  }
+  
+  # --- Compare RMST between groups and compile output---
+  
+  output <- tibble(rmst = 0, 
+                   lcl = 0, 
+                   ucl = 0)
+  
+  output$rmst <- rmst[2] - rmst[1] # no = 1, yes = 2
+  output$lcl <- rmst[2] - rmst[1] - qnorm(1 - 0.05 / 2) * sqrt(rmst_var[2] + rmst_var[1]) # no = 1, yes = 2
+  output$ucl <- rmst[2] - rmst[1] + qnorm(1 - 0.05 / 2) * sqrt(rmst_var[2] + rmst_var[1]) # no = 1, yes = 2
+  
+  print(output)
+}
+
+data_rmst <- data.frame()
+for(i in seq(from = 0, to = 41.1, by = 0.01)) {
+  data_rmst = rbind(data_rmst, armst_os(i))
+}
+
+tau_vec <- as.data.frame(seq(from = 0, to = 41.1, by = 0.01))
+
+plot_rmst <- cbind(tau_vec, data_rmst)
+colnames(plot_rmst)[1] <- "tau"
+colnames(plot_rmst)[2] <- "rmst"
+colnames(plot_rmst)[3] <- "lcl"
+colnames(plot_rmst)[4] <- "ucl"
+
+# plot RMST difference for IPW-adjusted model for OS
+rmst_plot_os <- plot_rmst %>% 
+  ggplot(data = ., aes(x = tau)) +
+  geom_smooth(aes(y = rmst), size = 0.8) +
+  geom_ribbon(aes(ymin = lcl, ymax = ucl), alpha = 0.6, fill = "#3C5488FF") +
+  scale_y_continuous(limits = c(-10, 10), breaks = seq(from = -10, to = 10, by = 2)) +
+  scale_x_continuous(limits = c(0, 41.1), breaks = seq(from = 0, to = 41.1, by = 4)) +
+  geom_hline(aes(yintercept = 0), lty = "dashed") +
+  labs(x = "Time from treatment initiation, month", 
+       y = "Difference in RMST (95% CI), month") +
+  theme_minimal() +
+  ggtitle("Overall survival") +
+  theme(text = element_text(size = 16),
+        axis.title.x =element_text(hjust = 0.5, size = 16),
+        plot.title = element_text(size = 16)) + 
+  guides(fill = guide_legend(nrow = 2)) 
+
+merge <- ggarrange(rmst_plot_pfs, rmst_plot_os,
+                   ncol = 2)
+```
+
+```{r trae, include = FALSE}
+one <- df %>% 
+  select(id, vio_all, vio_all2, trae_one, trae_one_grade) %>% 
+  rename(trae = trae_one, grade = trae_one_grade)
+two <- df %>% 
+  select(id, vio_all, vio_all2, trae_two, trae_two_grade) %>% 
+  rename(trae = trae_two, grade = trae_two_grade)
+three <- df %>% 
+  select(id, vio_all, vio_all2, trae_three, trae_three_grade) %>% 
+  rename(trae = trae_three, grade = trae_three_grade)
+
+d_trae <- bind_rows(one, two, three) %>% 
+  mutate(
+    trae = case_when(
+      (is.na(trae) | trae == "none") ~ as.character(NA),
+      TRUE ~ trae)
+  )
+
+tbl_trae <- d_trae %>% 
+  select(trae) %>% 
+  drop_na(trae) %>% 
+  tbl_summary()
+
+tbl_g3trae <- d_trae %>% 
+  filter(grade == "grade 3" | grade == "grade 4") %>% 
+  select(trae) %>% 
+  drop_na(trae) %>% 
+  tbl_summary()
+
+tbl_trae_merge <- tbl_merge(tbls = list(tbl_trae, tbl_g3trae), 
+                            tab_spanner = c("**All**", "**Grade 3 or more**"))
+
+dtrae <- d_trae %>% 
+  filter(!is.na(trae) | trae != "none") %>% 
+  distinct(id, .keep_all = TRUE)
+
+trae_pt_count <- dtrae %>% count() %>% as.numeric() # the number of patients developing trAE
+trae_pt_per <- (trae_pt_count / df %>% count() * 100) 
+trae_count <- d_trae %>% drop_na(trae) %>% count() %>% as.numeric()
+trae_per <- (trae_count / df %>% count() * 100) 
+trae_g3_count <- d_trae %>% filter(grade == "grade 3" | grade == "grade 4") %>% count() %>% as.numeric()
+trae_g3_per <- (trae_g3_count / trae_count * 100) 
+
+num <- function(var){var %>% str_sub(start = 1, end = 2) %>% as.numeric()}
+per <- function(var){var %>% str_sub(start = 5, end = 6) %>% as.numeric()}
+
+hypo <- tbl_trae %>% as_tibble
+hypo_num <- num(hypo[6, 2])
+hypo_per <- per(hypo[6, 2])
+
+# vio_all
+# all-grade trAEs
+trae.fisher <- fisher.test(df$vio_all, df$trae)
+trae.fisher.p <- trae.fisher[["p.value"]] %>% round(digits = 2) %>% as.numeric()
+
+inel_trae_num <- df %>% filter(vio_all == "yes" & trae == "yes") %>% count() %>% as.numeric()
+elg_trae_num <- df %>% filter(vio_all == "no" & trae == "yes") %>% count() %>% as.numeric()
+inel_trae_per <- (inel_trae_num / df %>% count * 100) 
+elg_trae_per <- (elg_trae_num / df %>% count * 100) 
+
+# severe trAEs
+traeg3.fisher <- fisher.test(df$vio_all, df$trae_g3)
+traeg3.fisher.p <- traeg3.fisher[["p.value"]] %>% round(digits = 3) %>% as.numeric()
+
+inel_traeg3_num <- df %>% filter(vio_all == "yes" & trae_g3 == "yes") %>% count() %>% as.numeric()
+elg_traeg3_num <- df %>% filter(vio_all == "no" & trae_g3 == "yes") %>% count() %>% as.numeric()
+inel_traeg3_per <- (inel_traeg3_num / df %>% count * 100) 
+elg_traeg3_per <- (elg_traeg3_num / df %>% count * 100) 
+
+# vio_all
+# all-grade trAEs
+trae.fisher <- fisher.test(df$vio_all, df$trae)
+trae.fisher.p <- trae.fisher[["p.value"]] %>% round(digits = 2) %>% as.numeric()
+
+inel_trae_num <- df %>% filter(vio_all == "yes") %>% filter(trae == "yes") %>% count() %>% as.numeric()
+elg_trae_num <- df %>% filter(vio_all == "no") %>% filter(trae == "yes") %>% count() %>% as.numeric()
+inel_trae_per <- inel_trae_num / (df %>% filter(vio_all == "yes") %>% count()) * 100 
+elg_trae_per <- elg_trae_num / (df %>% filter(vio_all == "no") %>% count()) * 100
+
+# severe trAEs
+traeg3.fisher <- fisher.test(df$vio_all, df$trae_g3)
+traeg3.fisher.p <- traeg3.fisher[["p.value"]] %>% round(digits = 2) %>% as.numeric()
+
+inel_traeg3_num <- df %>% filter(vio_all == "yes") %>% filter(trae_g3 == "yes") %>% count() %>% as.numeric()
+elg_traeg3_num <- df %>% filter(vio_all == "no") %>% filter(trae_g3 == "yes") %>% count() %>% as.numeric()
+inel_traeg3_per <- inel_traeg3_num / (df %>% filter(vio_all == "yes") %>% count()) * 100
+elg_traeg3_per <- elg_traeg3_num / (df %>% filter(vio_all == "no") %>% count()) * 100 
+
+# vio_all2
+# all-grade trAEs
+trae.fisher_vio2 <- fisher.test(df_sub$vio_all2, df_sub$trae)
+trae.fisher.p_vio2 <- trae.fisher_vio2[["p.value"]] %>% round(digits = 2) %>% as.numeric()
+
+inel_vio2_trae_num <- df_sub %>% filter(vio_all2 == "yes") %>% filter(trae == "yes") %>% count() %>% as.numeric()
+elg_vio2_trae_num <- df_sub %>% filter(vio_all2 == "no") %>% filter(trae == "yes") %>% count() %>% as.numeric()
+inel_vio2_trae_per <- inel_vio2_trae_num / (df_sub %>% filter(vio_all2 == "yes") %>% count()) * 100 
+elg_vio2_trae_per <- elg_vio2_trae_num / (df_sub %>% filter(vio_all2 == "no") %>% count()) * 100
+
+# severe trAEs
+traeg3.fisher_vio2 <- fisher.test(df_sub$vio_all2, df_sub$trae_g3)
+traeg3.fisher.p_vio2 <- traeg3.fisher_vio2[["p.value"]] %>% round(digits = 2) %>% as.numeric()
+
+inel_vio2_traeg3_num <- df_sub %>% filter(vio_all2 == "yes") %>% filter(trae_g3 == "yes") %>% count() %>% as.numeric()
+elg_vio2_traeg3_num <- df_sub %>% filter(vio_all2 == "no") %>% filter(trae_g3 == "yes") %>% count() %>% as.numeric()
+inel_vio2_traeg3_per <- inel_vio2_traeg3_num / (df_sub %>% filter(vio_all2 == "yes") %>% count()) * 100
+elg_vio2_traeg3_per <- elg_vio2_traeg3_num / (df_sub %>% filter(vio_all2 == "no") %>% count()) * 100 
+```
+
+```{r}
+# define labels...
+labeli <- as_labeller(c("vio_all=no" = "Eligible patients",
+                        "vio_all=yes" = "Ineligible patients"))
+
+rmst_pfs <- pfs_fit %>% broom::tidy(conf.int = FALSE) %>% 
+  group_by(strata) %>% 
+  ggplot(ggplot2::aes(x = time, y = estimate)) +
+  geom_step(size = 0.5, ggplot2::aes(color = strata)) +
+  geom_rect(ggplot2::aes(xmin = time, xmax = lead(time), ymin = 0, ymax = estimate, fill = strata, color = strata), alpha = 1) + 
+  scale_x_continuous(limits = c(0, 45), breaks = seq(0, 45, 6)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_minimal() + 
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(color = "white",
+                                    fill = "gray"),
+    text = element_text(size = 13),
+    plot.title = element_text(size = 12)
+  ) + 
+  labs(
+    title = "Restricted mean survival time for PFS based on trial eligibility",
+    x = "Time from treatment initiation, month",
+    y = "PFS probability"
+  ) + 
+  ggsci::scale_color_aaas() + ggsci::scale_fill_aaas() + 
+  facet_grid(cols = vars(strata), labeller = labeli) 
+
+rmst_os <- os_fit %>% broom::tidy(conf.int = FALSE) %>% 
+  group_by(strata) %>% 
+  ggplot(ggplot2::aes(x = time, y = estimate)) +
+  geom_step(size = 0.5, ggplot2::aes(color = strata)) +
+  geom_rect(ggplot2::aes(xmin = time, xmax = lead(time), ymin = 0, ymax = estimate, fill = strata, color = strata), alpha = 1) + 
+  scale_x_continuous(limits = c(0, 45), breaks = seq(0, 45, 6)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_minimal() + 
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(color = "white",
+                                    fill = "gray"),
+    text = element_text(size = 13),
+    plot.title = element_text(size = 12)
+  ) + 
+  labs(
+    title = "Restricted mean survival time for OS based on trial eligibility",
+    x = "Time from treatment initiation, month",
+    y = "OS probability"
+  ) + 
+  ggsci::scale_color_aaas() + ggsci::scale_fill_aaas() + 
+  facet_grid(cols = vars(strata), labeller = labeli) 
+
+
+```

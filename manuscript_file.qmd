@@ -1,0 +1,221 @@
+---
+title: "Effectiveness of pembrolizumab in trial-ineligible patients with metastatic urothelial carcinoma"
+titlerunning: Effectiveness of pembrolizumab in trial-ineligible mUC
+output: 
+  word_document: 
+    reference_docx: ~/OneDrive/research data/R/word_template.docx
+bibliography: references.bib
+csl: cancer-immunology-immunotherapy
+---
+
+### Authors
+
+Wataru Fukuokaya^1^, Takafumi Yanagisawa^1^, Masaki Hashimoto^1^, Shutaro Yamamoto^1^, Yuhei Koike^1^, Yu Imai^1^, Kosuke Iwatani^1^, Hajime Onuma^1^, Kagenori Ito^1^, Fumihiko Urabe^1^, Shunsuke Tsuzuki^1^, Shoji Kimura^1^, Jun Miki^1^, Yu Oyama^2^, Hirokazu Abe^3^, and Takahiro Kimura^1^
+
+### Institutions
+
+1.  Department of Urology, The Jikei University School of Medicine; 3-25-8 Nishi-shimbashi, Minato-ku, Tokyo, Japan, 105-8461; +81-3-3433-1111
+2.  Department of Medical Oncology, Kameda Medical Center; 929 Higashi-cho, Kamogawa City, Chiba, Japan, 296-8602; +81-4-7092-2211
+3.  Department of Urology, Kameda Medical Center; 929 Higashi-cho, Kamogawa City, Chiba, Japan, 296-8602; +81-4-7092-2211
+
+### Corresponding author
+
+Wataru Fukuokaya, M.D.; Assistant Professor; Department of Urology, The Jikei University School of Medicine; 3-25-8, Nishi-shimbashi, Minato-ku, Tokyo 105-8461, Japan; telephone +81-3-3433-1111; Fax +81-3-3433-1230; e-mail: [wfukuokaya\@gmail.com](mailto:wfukuokaya@gmail.com){.email}; ORCID 0000-0003-1044-912X
+
+### Abbreviations
+
+BMI; body mass index
+
+CI; confidence interval
+
+CPI; checkpoint inhibitor
+
+ECOG; eastern cooperative oncology group
+
+iCPD; immune-confirmed progressive disease
+
+iCR; immune complete response
+
+iPR; immune partial response
+
+iSD; immune stable disease
+
+iUPD; immune-unconfirmed progressive disease
+
+IPTW; inverse probability of treatment weight
+
+iRECIST; Immunotherapy Response Evaluation Criteria in Solid Tumors
+
+NLR; neutrophil-to-lymphocyte ratio
+
+OR; odds ratio
+
+OS; overall survival
+
+PD-1; programmed cell death protein-1
+
+PFS; progression-free survival
+
+RMST; restricted mean survival time
+
+SMD; standardized mean difference
+
+trAE; treatment-related adverse event
+
+UC; urothelial carcinoma
+
+\newpage
+
+### Abstract
+
+### Background
+
+The KEYNOTE-045 trial showed that pembrolizumab therapy improved the survival of patients with advanced urothelial carcinoma (UC). However, its effectiveness in trial-ineligible patients remains unclear.
+
+### Materials and Methods
+
+We conducted a multicenter retrospective study to evaluate the effectiveness of pembrolizumab in patients with metastatic UC who were trial-ineligible. The data of 164 consecutive patients with platinum-treated metastatic UC who received pembrolizumab as second-line therapy were analyzed. Trial eligibility was assessed using the KEYNOTE-045 criteria. Inverse probability of treatment weighting (IPTW) was used to balance patient characteristics. Overall survival (OS) and progression-free survival (PFS) were examined using the IPTW-adjusted Kaplan-Meier method. IPTW-adjusted restricted mean survival times (RMSTs) were compared between ineligible and eligible patients.
+
+### Results
+
+Seventy-five patients (45.7%) were classified as ineligible based on the KEYNOTE-045 criteria. Baseline hemoglobin concentration of less than 9.0 g/dL was the most common reason for trial protocol violation (N = 23 [14.0%]). An IPTW-adjusted logistic regression model showed that the trial-eligibility was not significantly associated with objective response (OR: 0.65, 95% CI: 0.32 to 1.29, P = 0.22). Ineligible patients had similar RMST for PFS (difference: 3.8 months, 95% CI: -1.6 to 9.3, P = 0.17) and RMST for OS (difference: 1.4 months, 95% CI: -5.4 to 8.2, P = 0.93) compared with eligible patients.
+
+### Conclusions
+
+This study suggests that the effectiveness of pembrolizumab may be retained in ineligible patients with platinum-treated metastatic UC. Expanding trial eligibility criteria for these patients may be beneficial.
+
+\newpage
+
+### Manuscript
+
+### Introduction
+
+Advanced or metastatic urothelial carcinoma (UC) is highly lethal, with a median overall survival (OS) of 14 to 15 months when treated with platinum-based chemotherapy as the standard first-line therapy.[@vondermaase2005] The KEYNOTE-045 trial showed that pembrolizumab, an antibody targeting programmed cell death protein-1 (PD-1), improved OS in patients with platinum-refractory advanced UC as second-line therapy.[@bellmunt2017] Furthermore, checkpoint inhibitor (CPI) therapy has expanded to the first-line therapy for patients with advanced UC who are unfit for cisplatin.[@vuky2020]
+
+Patients with UC are likely to be aged, have poor performance status, or impaired hepatic or renal function, and approximately 30% to 50% of patients are cisplatin-unfit.[@dash2006] Because of their favorable safety profile, physicians are likely to use CPIs such as pembrolizumab and atezolizumab instead of standard chemotherapy,[@balar2017; @vuky2020; @parikh2019] especially for patients with poor physical conditions. Indeed, a large-scale retrospective study showed that CPIs were more preferentially used for this population in patients with advanced UC compared to other cancers.[@parikh2021] Despite the increase in its use, given that the KEYNOTE-045 trial only enrolled patients who were fit for chemotherapy, the effectiveness of pembrolizumab in patients who were trial-ineligible is still unclear.
+
+In this study, using the KEYNOTE-045 criteria, we evaluated the effectiveness of pembrolizumab therapy in trial-ineligible patients with metastatic UC.
+
+### Materials and Methods
+
+### Data collection
+
+After approval by the institutional review board, this multicenter retrospective study was conducted using the medical records of 241 consecutive patients with metastatic urothelial cancer who received pembrolizumab as a second-line therapy at least once between February 2018 and October 2021 at the following institutions: Department of Urology, The Jikei University Hospital; Department of Urology, The Jikei University Kashiwa Hospital; Department of Urology, The Jikei University Daisan Hospital; Department of Urology, The Jikei University Katsushika Medical Center; Department of Urology, Kameda Medical Center; Department of Medical Oncology, Kameda Medical Center. Among them, patients were excluded because they did not receive platinum-based chemotherapy (N = 4), did not have available treatment response data (N = 13), did not have urothelial cancer (N = 1), had missing baseline data (N = 1), or had not progressed following chemotherapy (N = 58), thus leaving 164 patients for the analysis. Supplemental Figure 1 shows the number of patients excluded and the reasons for their exclusion. The following variables were collected from the electronic medical records: age at treatment initiation, sex, Eastern Cooperative Oncology Group (ECOG) performance status, body mass index (BMI), smoking status, the previous history of radical surgery, the primary location of tumor, the number of metastatic sites, the presence of liver metastasis, the prior platinum-based chemotherapy, the most recent chemotherapy, concomitant proton pump inhibitor (PPI) use, previous antibiotic use, and baseline neutrophil-to-lymphocyte ratio (NLR). Furthermore, the clinical data regarding eligibility for the KEYNOTE-045 trial were also collected.[@bellmunt2017] The trial eligibility criteria have been shown previously.[@bellmunt2017] Pembrolizumab was administered intravenously at a dose of 200 mg every three weeks or 400 mg every six weeks.
+
+### Assessment
+
+The initial date of pembrolizumab administration was set as the baseline. The primary outcomes of interest were overall survival (OS) and progression-free survival (PFS). OS was defined as the interval from the baseline to the date of all-cause death. PFS was defined as the interval from the baseline to the date of radiographic progression or all-cause death, whichever occurred first. Disease progression was assessed using the Immunotherapy Response Evaluation Criteria in Solid Tumors (iRECIST).[@seymour2017] The principles for evaluating treatment response and disease progression have not changed largely from the RECIST version 1.1,[@eisenhauer2009] except for the re-assessment of radiographic progression to discriminate atypical responses from true progression. The secondary outcome of interest was immune objective response per iRECIST (the sum of immune complete response and immune partial response).[@seymour2017] For patients without events, the follow-up was censored at the last disease evaluation. Follow-up examinations based on computed tomography and/or magnetic resonance imaging of the chest, abdomen, and pelvis were performed discretionary and generally performed every six to 12 weeks. In addition, we also studied the association between trial eligibility and the incidence of treatment-related adverse events (trAEs). TrAEs were defined according to the previous studies as immunologically driven adverse events that require immunosuppressive or endocrine intervention.[@brahmer2015; @borghaei2015] The clinical severity of trAEs was graded based on the Common Terminology Criteria for Adverse Events, version 4.0.
+
+### Data analysis
+
+Descriptive statistics for categorical variables are shown as frequencies and percentages, whereas continuous variables are reported as the mean and standard deviation (SD). The association between variables was assessed using absolute standardized mean difference (SMD), where more than 0.1 (10%) of SMD was considered as a significant imbalance between variables.[@austin2009] Patients were grouped according to whether they had met the eligibility criteria for the KEYNOTE-045 trial. The association between the eligibility and the incidence of trAEs was examined using Fisher's exact test.
+
+Stabilized inverse probability of treatment weighting (IPTW) based on propensity score was used to adjust the baseline patient characteristics.[@robins2000] Propensity score, the probability of patients being eligible, was estimated based on a multivariable logistic regression model with age at treatment initiation, sex, ECOG performance status, BMI, smoking status, the previous history of radical surgery, the primary location of tumor, the number of metastatic sites, the presence of liver metastasis, the prior platinum-based chemotherapy, the most recent chemotherapy, concomitant PPI use, previous antibiotic use, baseline NLR, and Bajorin risk score as covariates. Bajorin risk scores were calculated based on the number of the following adverse prognostic factors: the presence of visceral metastasis (liver, lung, or bone metastasis) and ECOG performance status (2 or more).[@bajorin1999] The distribution of propensity scores between the groups was determined using Kernel density estimation.
+
+A multivariable logistic regression model was used to examine the association between the eligibility and the other patient characteristics. The results were described as odds ratios (ORs) and the corresponding 95% confidence intervals (CIs). The association between immune objective response and eligibility criteria was assessed using an IPTW-adjusted logistic regression model.
+
+The time-to-event distribution of the unweighted and weighted populations was estimated based on the Kaplan-Meier method and compared using a weighted log-rank test. Furthermore, the IPTW-adjusted restricted mean survival time (RMST) difference, the absolute difference between the IPTW-adjusted RMST of eligible patients and the IPTW-adjusted RMST of ineligible patients, was calculated to quantify the magnitude of the clinical impact of the KEYNOTE-045 eligibility on the outcome of patients with metastatic UC receiving pembrolizumab. RMST is the average event-free time until a milestone time point, a numeric expression of the area under the Kaplan-Meier curve.[@royston2013] In this analysis, the RMST was estimated until the last all-cause death was observed. Finally, a sensitivity analysis for the RMST difference was conducted by depicting the RMST difference with 95% CI as a function of time.[@liao2020]
+
+Although previous studies showed the difference in survival between patients who had progressed following first-line chemotherapy and those who had not,[@bellmunt2017; @powles2020] evidence is limited for patients with metastatic UC receiving pembrolizumab. Thus, sensitivity analysis based on the cohort comprised of patients used for the primary analysis (N = 164) plus patients who had not progressed following chemotherapy (N = 58) were performed to assess the robustness of the study findings. In addition to the covariates used in the primary analysis, the proportion of patients who had not progressed following chemotherapy was also adjusted based on IPTW.
+
+All statistical tests were two-sided, and a P value \< 0.05 indicated statistical significance. All statistical analyses were performed using R version 4.2.1 (R Foundation for Statistical Computing).
+
+### Results
+
+### Patient characteristics
+
+Baseline patient characteristics of the unweighted and weighted population are summarized in Table 1. The median follow-up was 13.5 months (95% CI: 11.7 to 19.3). During the follow-up, 84 (51.2%) and 126 (76.8%) patients experienced all-cause mortality and radiographic progression, respectively. Treatment durations were significantly shorter in ineligible patients than eligible patients (median, ineligible patients, 6.3 months [95% CI: 3.4 to 17.6] vs. eligible patients, 12.0 months [95% CI: 6.2 to 18.2], P = 0.011 [Wilcoxon rank sum test]), and the proportions of patients discontinuing treatment without progression were similar between ineligible and eligible patients (ineligible patient, 15 [21.1%] vs. eligible patients, 11 [16.9%]) (Supplemental Table 1). Seventy-five (45.7%) were not eligible according to the KEYNOTE-045 criteria. The distribution of the estimated propensity scores is shown in Figure 1. The distribution overlapped, indicating that the positivity assumption was not violated. Baseline patient characteristics were significantly imbalanced between the groups, and IPTW achieved adequate balance (Table 1).
+
+### Association of KEYNOTE-045 eligibility with patient characteristics
+
+Violation of KEYNOTE-045 eligibility criteria is summarized in Table 2. The most common reason for the violation was a baseline hemoglobin concentration of less than 9.0 g/dL (N = 23 [14.0%]). The results of the multivariable logistic regression model predicting patient eligibility are shown in Table 3. Of all patient characteristics, trial eligibility was associated with cisplatin use as a first-line chemotherapy (OR: 0.33, 95% CI: 0.15 to 0.72, P = 0.006) and concomitant proton pump inhibitor use (OR: 2.43, 95% CI: 1.17 to 5.14, P = 0.018) (Table 3).
+
+### Association of KEYNOTE-045 eligibility with effectiveness of pembrolizumab
+
+The crude best overall response data according to eligibility criteria are shown in Supplemental Figure 2. During follow-up, 45 patients (27.4%) experienced immune objective response. An IPTW-adjusted univariable logistic regression model indicated that there was no significant association between eligibility criteria and immune objective response (OR: 0.65, 95% CI: 0.32 to 1.29, P = 0.22).
+
+The median PFS and OS were 2.8 (95% CI: 2.3 to 4.8) and 13.5 months (95% CI: 11.7 to 19.3), respectively. The last all-cause death was observed at 41.1 months after treatment initiation. Crude data showed that ineligible patients had a shorter OS compared with eligible patient (ineligible patients; median, 6.7 months, 95% CI: 5.1 to 30.8 vs. eligible patients; median, 16.2 months, 95% CI: 12.4 to 27.5, P = 0.04) (Figure 2). Ineligible patients had a similar PFS compared with eligible patients (ineligible patients; median, 2.3 months, 95% CI: 1.9 to 5.2 vs. eligible patients; median, 3.6 months, 95% CI: 2.7 to 7.1, P = 0.40). However, the difference in OS was no longer significant after IPTW adjustment (ineligible patients; median, 17.7 months, 95% CI: 5.9 to not reached vs. eligible patients; median, 13.4 months, 95% CI: 11.2 to 20.1, P = 0.93) (Figure 2).
+
+Furthermore, the IPTW-adjusted RMST analyses revealed that, within the 41.1-month window, ineligible patients had a 3.8 months (95% CI: -1.6 to 9.3, P = 0.17) longer progression-free and lived for 1.4-months (95% CI: -5.4 to 8.2, P = 0.69) more compared to eligible patients. Finally, sensitivity analysis showed that no significant difference in RMST was observed until the last observed all-cause death (Figure 3).
+
+### Association of KEYNOTE-045 eligibility with treatment-related adverse event due to pembrolizumab
+
+During the follow-up, 45 (27.4%) patients experienced 60 trAEs. A summary of trAEs is shown in Supplemental Table 1. Of all trAEs, 15 (25.0%) were grade 3 or higher, and the trAE with the highest incidence was hypothyroidism (13 [22.0%]). Trial-eligibility was not significantly associated with the incidence of all-grade trAEs (ineligible patients, 18 [24.0%] vs. eligible patients, 27 [30.3%]); P = 0.39) or trAEs with grade 3 or more (ineligible patients, 7 [9.3%] vs. eligible patients, 4 [4.5%]); P = 0.35).
+
+### Sensitivity analysis
+
+Sensitivity analysis was performed to assess the robustness of our findings. In this analysis, patients who did not progressed following chemotherapy (N = 58) were included in the study population. After IPTW adjustment, patient characteristics, including the proportion of patients without progression following chemotherapy, were well balanced, with 2 exceptions: ineligible patients were more likely to be older (mean, 72.7 vs. 71.5 years, SMD = 0.13), have liver metastasis (21.5% vs. 16.9%, SMD = 0.12), and had a previous history of antibiotic use (23.7% vs. 18.9%, SMD = 0.12) (Supplemental Table 3). An IPTW-adjusted univariable logistic regression model showed that the ineligibility was not associated with the immune objective response (OR: 0.60, 95% CI: 0.31 to 1.14, P = 0.13). Although ineligible patients had a significantly inferior OS compared with eligible patients before weighting (ineligible patients; median, 6.7 months, 95% CI: 4.5 to 19.1 vs. eligible patients; median, 19.1 months, 95% CI: 13.6 to 27.5, P = 0.002), there was no significant difference in OS between ineligible and eligible patients after weighting (ineligible patients; median, 13.5 months, 95% CI: 5.9 to not reached vs. eligible patients; median, 16.3 months, 95% CI: 12.7 to 22.7, P = 0.49) (Supplemental Figure 3). RMST analysis showed that ineligible patients had similar RMST for PFS (difference: 3.0 months, 95% CI: -2.8 to 8.7, P = 0.31) and OS (difference: -1.1 months, 95% CI: -7.6 to 5.5, P = 0.75). Furthermore, within the 41.1-month window, the IPTW-adjusted dynamic RMST difference curves showed no significant differences between the groups (Supplemental Figure 4).
+
+The eligibility criteria were not associated with the incidence of all-grade trAEs (ineligible patients, 19 [22.6%] vs. eligible patients, 42 [30.4%]); P = 0.21) and trAEs with grade 3 or more (ineligible patients, 7 [8.3%] vs. eligible patients, 9 [6.5%]); P = 0.60).
+
+### Discussion
+
+Recent advances in CPI have improved the outcomes of patients with advanced or metastatic UC and have now become a part of the standard of care. As shown in the data from the KEYNOTE-045 trial, pembrolizumab therapy had a better safety profile than that standard chemotherapy.[@bellmunt2017] However, owing to the study design, the results of this study could not be applied to patients with poor performance status, hepatic or renal dysfunction, or chemotherapy-ineligible patients.[@bellmunt2017] Although accumulating evidence suggests that pembrolizumab therapy showed the clinical benefit for patients with advanced UC who were cisplatin-ineligible and/or had poor performance status,[@grivas2020; @balar2017] the benefit of second-line pembrolizumab for patients who did not meet the clinical trial eligibility criteria has yet to be evaluated.
+
+This study showed that, after adjusting for baseline characteristics using propensity score weighting, the effectiveness of pembrolizumab therapy for patients who were ineligible for KEYNOTE-045 was similar to those who were eligible. The proportion of ineligible patients was comparable with that of previous studies that assessed ineligible patients using the real-world data[@donia2017; @yoo2018]. Baseline patient characteristics were also comparable to those reported in other large-scale studies.[@kobayashi2021] As shown in Table 1, ineligible patients had a worse performance status than eligible patients. This imbalance may result in the dissociation of survival distribution within the first year after treatment initiation, as shown by the Kaplan-Meier curve for OS in an unweighted population. Within the 41.1-month window, the absolute difference in RMST for OS and PFS were 1.4 and 3.8 months, respectively, indicating that their survival distributions were also comparable when evaluated quantitatively. Importantly, the incidence of all-grade and severe (grade 3 or more) trAEs was similar between the groups. Collectively, the results indicated that pembrolizumab therapy might be effective for patients who are ineligible and are clinical candidates for pembrolizumab therapy, and suggested that the trial eligibility criteria for CPI could be eased in this population, especially when the comparator arm is not cytotoxic chemotherapy. Given that the other study based on the data of patients with non-small-cell lung cancer receiving CPIs showed those who were ineligible for clinical trial might benefit from the treatments, our findings could apply to patients with metastatic UC treated with other CPIs.[@liu2021]
+
+In contrast to the evidence showing that poor performance status and those receiving systemic glucocorticoid therapy were worse prognostic factors for patients with cancer treated with CPIs, results suggested that ineligible patients had similar survival compared with eligible patients.[@khaki2020] Although the KEYNOTE-045 eligibility criteria include several adverse prognostic factors such as poor performance status and concomitant glucocorticoid use,[@khaki2020; @petrelli2020] the variability of trial criteria might explain this discrepancy. Identifying criteria that can exclude from trial eligibility criteria and have a minimal effect on the survival of patients is important. Given the limited sample size of our data, further large-scale studies are warranted to address this topic.
+
+A large-scale retrospective study comprising the data of 34,131 patients with advanced cancer recently showed that ineligible patients, defined as ECOG performance status of \>2 or the presence of kidney or liver dysfunction, did not benefit from CPI monotherapy and CPI combination therapy compared with non-CPI therapy.[@parikh2021] In contrast, given the established benefit of pembrolizumab compared with chemotherapy in patients with platinum-treated UC,[@bellmunt2017] our findings suggest that the benefit of CPI might be superior to that of chemotherapy in the ineligible population. The following factors might explain the discordance between the results of this study and our findings: 1) it evaluated patients receiving first-line systemic therapy, 2) the definition of the trial-eligibility violation differed between the studies, and 3) the models for propensity score estimation did not consider tumor factors, such as metastatic burden and the presence of liver metastasis. Further research is warranted to evaluate the benefit of CPI compared to chemotherapy in patients with metastatic UC who are ineligible.
+
+This study has several limitations that arise due to its retrospective nature of this analysis. First, although IPTW balanced baseline patient characteristics, unmeasured confounders such as comorbidity, programmed death-ligand 1 expression status, and heterogeneity of clinical practice across the participating institutions, might have influenced the results. Second, the follow-up radiographic examinations were not completely standardized. Importantly, this study could not include patients with poor physical conditions who could not receive pembrolizumab therapy. Further studies are required to adjust for selection bias. Given the limited sample size of this study, further large-scale studies are warranted to identify the criteria that could be removed from trial eligibility criteria and have a minimal effect on the effectiveness of pembrolizumab. Finally, our data did not include patients receiving the second-line chemotherapy as a comparator arm. Despite these limitations, this study indicates that the clinical benefit of pembrolizumab therapy for ineligible patients with metastatic UC might not be inferior to that of eligible patients.
+
+### Conclusions
+
+In summary, this multicenter retrospective study suggested that the effectiveness of second-line pembrolizumab therapy in patients with metastatic UC who were ineligible for KEYNOTE-045 was similar to that in eligible patients. The incidence of trAEs was also comparable between the two groups. Further research is needed to validate these findings.
+
+### Statements & Declarations
+
+### Funding
+
+The authors declare that no funds, grants, or other support were received during the preparation of this manuscript.
+
+### Competing Interests
+
+The authors have no conflict of interests regarding this study.
+
+### Author Contributions
+
+Conception/design: WF, TK; collection and/or assembly of data: WF, TY, MH, SY, YK, YI, KI, HO, KI, FU, ST, SK, YO, and HA; data analysis and interpretation: WF, TY, YI, KI, HO, KI, FU, ST, SK, JM, YO, HA, and TK; manuscript writing: WF, TY, and TK; final approval of the manuscript: WF, TY, MH, SY, YK, YI, KI, HO, KI, FU, ST, SK, JM, YO, HA, and TK
+
+### Data availability
+
+All data relevant to this retrospective study are included in the article.
+
+### Ethics approval
+
+The study was approved by the Ethics Committee of The Jikei University School of Medicine for Biomedical Research and was conducted in accordance with Good Clinical Practice Guidelines and the Declaration of Helsinki.
+
+### Figure Captions
+
+#### **Fig 1.**
+
+The distributions of propensity scores based on the KEYNOTE-045 eligibility.
+
+#### **Fig 2.**
+
+Crude and IPTW-adjusted Kaplan-Meier estimates for PFS and OS according to the KEYNOTE-045 eligibility.
+
+#### **Fig 3.**
+
+Dynamic IPTW-adjusted RMST difference curves for PFS and OS based on the KEYNOTE-045 eligibility. Blue lines indicate the difference in RMST between the groups. RMST differences were calculated according to the following formula: RMST[ineligible patients] and RMST[eligible patients]. An RMST difference of \> 0 indicated that the RMST of ineligible patients was longer than that of eligible patients.
+
+#### Supplemental Fig 1.
+
+The study design.
+
+#### **Supplemental Fig 2.**
+
+Best overall response stratified by the eligibility for KEYNOTE-045.
+
+#### Supplemental Fig 3.
+
+Crude and IPTW-adjusted Kaplan-Meier estimates for PFS and OS (Sensitivity analysis).
+
+#### Supplemental Fig 4.
+
+Dynamic IPTW-adjusted RMST difference curves for PFS and OS based on the KEYNOTE-045 eligibility (Sensitivity analysis). Blue lines indicate the difference in RMST between the groups. RMST differences were calculated according to the following formula: RMST[ineligible patients] and RMST[eligible patients]. An RMST difference of \> 0 indicated that the RMST of ineligible patients was longer than that of eligible patients.
+
+\newpage
+
+### References
